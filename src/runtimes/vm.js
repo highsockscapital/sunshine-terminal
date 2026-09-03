@@ -1,6 +1,11 @@
-// SunshineCLI Android 16 AVF (Android Virtualization Framework) Linux VM Runtime
+// SunshineCLI Android 16 AVF (Android Virtualization Framework) Linux VM Runtime - Primary Execution Runtime
 import { execSync } from 'child_process';
 import { info, success, warning, error, colors } from '../ui.js';
+
+/**
+ * Note: Bionic (Termux native) operations are now handled directly via your Termux shell.
+ * SunshineCLI focuses on AVF Linux VM execution for commands bionic cannot support.
+ */
 
 export async function checkAVFStatus() {
   info(`Inspecting Android 16 AVF (Android Virtualization Framework) status...`);

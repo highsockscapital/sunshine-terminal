@@ -1,7 +1,6 @@
 // SunshineCLI Main Controller
 import { banner, promptSymbol, info, success, warning, error, colors } from './ui.js';
 import { listWorkspace, readFileContent, writeFileContent } from './workspace.js';
-import { executeBionic } from './runtimes/bionic.js';
 import { checkAVFStatus, executeAVF } from './runtimes/vm.js';
 
 export async function main() {
@@ -44,11 +43,10 @@ export async function main() {
     case 'run':
     case 'exec':
       if (!subArg1) {
-        error(`Please specify a command to run in Bionic runtime. Usage: scli run "<command>"`);
+        error(`Please specify a command to run in AVF Linux VM. Usage: scli run "<command>"`);
         break;
       }
-      const bionicArgs = args.slice(1);
-      await executeBionic(bionicArgs.join(' '));
+      await executeAVF(args.slice(1).join(' '));
       break;
 
     case 'vm':
@@ -60,6 +58,11 @@ export async function main() {
         const vmCommand = args.slice(1).join(' ');
         await executeAVF(vmCommand);
       }
+      break;
+
+    case 'bionic':
+      error(`Bionic runtime operations are now handled directly via Termux. Use your Termux shell for native operations.`);
+      info(`Tip: ${colors.pink}sunshine status${colors.reset} shows AVF VM status, or use your Termux prompt for bionic commands.`);
       break;
 
     case 'help':
