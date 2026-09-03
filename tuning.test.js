@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { TIERS, classifyCommand, stripQuotedSpans } from '../src/runtimes/policy.js';
-import { writeJsonSafe } from '../src/runtimes/bridge.js';
-import { issueSessionToken } from '../src/runtimes/auth.js';
-import { liveBridge } from '../src/runtimes/bridge.js';
+import { TIERS, classifyCommand, stripQuotedSpans } from './src/runtimes/policy.js';
+import { writeJsonSafe } from './src/runtimes/bridge.js';
+import { issueSessionToken } from './src/runtimes/auth.js';
+import { liveBridge } from './src/runtimes/bridge.js';
 
 describe('quoted string literals', () => {
   it('drops multi-word literals, keeps single-word command words', () => {

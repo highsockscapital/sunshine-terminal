@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { probeThermal, degradedResources, THERMAL_LEVELS } from '../src/runtimes/thermal.js';
-import { createDebianEngine } from '../src/runtimes/debian.js';
-import { showThermal } from '../src/runtimes/vm.js';
+import { probeThermal, degradedResources, THERMAL_LEVELS } from './src/runtimes/thermal.js';
+import { createDebianEngine } from './src/runtimes/debian.js';
+import { showThermal } from './src/runtimes/vm.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

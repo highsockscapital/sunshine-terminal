@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { readJsonFile } from '../src/runtimes/bridge.js';
-import { createDebianEngine } from '../src/runtimes/debian.js';
-import { createMicrodroidEngine } from '../src/runtimes/microdroid.js';
-import { readFileContent, writeFileContent } from '../src/workspace.js';
+import { readJsonFile } from './src/runtimes/bridge.js';
+import { createDebianEngine } from './src/runtimes/debian.js';
+import { createMicrodroidEngine } from './src/runtimes/microdroid.js';
+import { readFileContent, writeFileContent } from './src/workspace.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

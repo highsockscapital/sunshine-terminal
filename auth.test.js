@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateToken, tokenId, issueSessionToken, loadSessionToken, revokeSessionToken } from '../src/runtimes/auth.js';
+import { generateToken, tokenId, issueSessionToken, loadSessionToken, revokeSessionToken } from './src/runtimes/auth.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

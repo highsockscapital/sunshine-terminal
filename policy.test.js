@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TIERS, classifyCommand, decideExec, normalizeCommand } from '../src/runtimes/policy.js';
+import { TIERS, classifyCommand, decideExec, normalizeCommand } from './src/runtimes/policy.js';
 
 describe('normalizeCommand', () => {
   it('strips quotes, backslashes and case', () => {

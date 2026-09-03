@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createDebianEngine, GUEST_BUNDLE_VERSION } from '../src/runtimes/debian.js';
-import { enforcePolicy } from '../src/runtimes/policy.js';
+import { createDebianEngine, GUEST_BUNDLE_VERSION } from './src/runtimes/debian.js';
+import { enforcePolicy } from './src/runtimes/policy.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

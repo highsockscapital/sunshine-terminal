@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { selectProvider } from '../src/runtimes/vm.js';
-import { PROVIDER_IDS } from '../src/runtimes/provider.js';
+import { selectProvider } from './src/runtimes/vm.js';
+import { PROVIDER_IDS } from './src/runtimes/provider.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

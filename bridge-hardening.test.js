@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { truncateOutput, appendAuditLog, DEFAULT_MAX_OUTPUT_BYTES } from '../src/runtimes/bridge.js';
+import { truncateOutput, appendAuditLog, DEFAULT_MAX_OUTPUT_BYTES } from './src/runtimes/bridge.js';
 
 describe('truncateOutput', () => {
   it('passes short output through untouched', () => {
@@ -43,7 +43,7 @@ describe('appendAuditLog', () => {
   });
 
   it('redacts common secret shapes', async () => {
-    const { redactSecrets } = await import('../src/runtimes/bridge.js');
+    const { redactSecrets } = await import('./src/runtimes/bridge.js');
     assert.ok(redactSecrets('x --token abc123').includes('[redacted]'));
     assert.ok(!redactSecrets('x --token abc123').includes('abc123'));
     assert.ok(!redactSecrets('password=hunter2').includes('hunter2'));

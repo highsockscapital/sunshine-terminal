@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { buildTree, renderTreeLines, resolveCanonical } from '../src/drawer.js';
-import { renderMarkdown, INLINE_BUDGET } from '../src/markdown.js';
-import { createFileEntry } from '../src/workspace.js';
+import { buildTree, renderTreeLines, resolveCanonical } from './src/drawer.js';
+import { renderMarkdown, INLINE_BUDGET } from './src/markdown.js';
+import { createFileEntry } from './src/workspace.js';
 
 describe('buildTree symlink handling', () => {
   const sandbox = path.join(os.tmpdir(), `sunshine-symlink-test-${process.pid}`);

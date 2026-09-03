@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRingBuffer, capOutputLines, RING_BUFFER_LINES } from '../src/runtimes/bridge.js';
-import { executeAVF, resetAgentLoop, checkAgentLoop, DEFAULT_AGENT_MAX_STEPS } from '../src/runtimes/vm.js';
+import { createRingBuffer, capOutputLines, RING_BUFFER_LINES } from './src/runtimes/bridge.js';
+import { executeAVF, resetAgentLoop, checkAgentLoop, DEFAULT_AGENT_MAX_STEPS } from './src/runtimes/vm.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

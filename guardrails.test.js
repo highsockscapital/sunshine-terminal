@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { deleteEntry, moveEntry } from '../src/workspace.js';
-import { decideExec, TIERS } from '../src/runtimes/policy.js';
-import { isProtectedPath as isProtectedPathDirect } from '../src/drawer.js';
+import { deleteEntry, moveEntry } from './src/workspace.js';
+import { decideExec, TIERS } from './src/runtimes/policy.js';
+import { isProtectedPath as isProtectedPathDirect } from './src/drawer.js';
 
 describe('isProtectedPath', () => {
   const root = '/ws';

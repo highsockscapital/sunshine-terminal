@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { pingGuest, recoverGuest, createHeartbeatMonitor } from '../src/runtimes/heartbeat.js';
-import { createDebianEngine } from '../src/runtimes/debian.js';
+import { pingGuest, recoverGuest, createHeartbeatMonitor } from './src/runtimes/heartbeat.js';
+import { createDebianEngine } from './src/runtimes/debian.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';

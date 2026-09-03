@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defineProvider } from '../src/runtimes/provider.js';
-import { createMicrodroidEngine } from '../src/runtimes/microdroid.js';
-import { createDebianEngine, defaultDebianConfig } from '../src/runtimes/debian.js';
+import { defineProvider } from './src/runtimes/provider.js';
+import { createMicrodroidEngine } from './src/runtimes/microdroid.js';
+import { createDebianEngine, defaultDebianConfig } from './src/runtimes/debian.js';
 import { makeFakeBridge } from './fake-bridge.js';
 
 const VM_DIR = '/tmp/fake-sunshine-vm';
