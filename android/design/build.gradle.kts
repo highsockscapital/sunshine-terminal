@@ -12,6 +12,12 @@ android {
         minSdk = 34
     }
 
+    // Kotlin JVM toolchain: ensure Kotlin compilation targets JVM 17
+    // to match the consistent version with javac compilation.
+    kotlin {
+        jvmToolchain(17)
+    }
+
     buildFeatures {
         compose = true
     }

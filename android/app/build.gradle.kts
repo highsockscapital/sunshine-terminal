@@ -17,6 +17,12 @@ android {
         versionName = "1.0.0"
     }
 
+    // Kotlin JVM toolchain: ensure Kotlin compilation targets JVM 17
+    // to match the consistent version with javac compilation.
+    kotlin {
+        jvmToolchain(17)
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
