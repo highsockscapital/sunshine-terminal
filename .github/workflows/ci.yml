@@ -38,7 +38,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.10.2
-      - run: gradle :app:lintDebug :app:assembleDebug --stacktrace
+      - run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: sunshine-terminal-debug-apk

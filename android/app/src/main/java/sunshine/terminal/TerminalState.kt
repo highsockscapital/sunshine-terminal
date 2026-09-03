@@ -47,6 +47,37 @@ data class LoopPause(
     val cap: Int,
 )
 
+/** One workspace entry (workspace.js listWorkspace / drawer.js buildTree leaf). */
+data class WorkspaceEntry(
+    val name: String,
+    val path: String,
+    val isDirectory: Boolean,
+)
+
+/** Directory listing for the file drawer (cwd + visible entries). */
+data class WorkspaceListing(
+    val cwd: String = ".",
+    val entries: List<WorkspaceEntry> = emptyList(),
+    val error: String? = null,
+)
+
+/** File preview for the drawer right panel (drawer.js previewLinesFor). */
+data class FileContent(
+    val path: String,
+    val lines: List<String> = emptyList(),
+    val isMarkdown: Boolean = false,
+    val error: String? = null,
+)
+
+/** One terminal session (tab) — switchable via the sidebar. */
+data class TerminalSession(
+    val id: String,
+    val title: String,
+    val blocks: List<TerminalBlock> = emptyList(),
+    val history: List<String> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
 /** Whole-screen state held by TerminalViewModel. */
 data class TerminalUiState(
     val blocks: List<TerminalBlock> = emptyList(),
@@ -57,4 +88,9 @@ data class TerminalUiState(
     val connection: ConnectionState = ConnectionState.CONNECTED,
     val input: String = "",
     val history: List<String> = emptyList(),
+    val sidebarOpen: Boolean = false,
+    val sessions: List<TerminalSession> = emptyList(),
+    val activeSessionId: String? = null,
+    val workspace: WorkspaceListing = WorkspaceListing(),
+    val selectedFile: FileContent? = null,
 )

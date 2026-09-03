@@ -7,7 +7,10 @@
 package sunshine.terminal
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +25,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,7 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -66,52 +74,111 @@ fun TerminalBlockCanvas(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TerminalBlockCard(block: TerminalBlock) {
-    // Block canvas: 12dp surface in surfaceVariant, flat (0dp elevation).
-    Card(
-        shape = SunshineShape.canvas,
-        colors = CardDefaults.cardColors(containerColor = SunshineTokens.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = when (block.status) {
-            BlockStatus.FAILED -> BorderStroke(1.dp, SunshineTokens.error)
-            BlockStatus.DENIED -> BorderStroke(1.dp, SunshineTokens.strokeBorderLight)
-            else -> null
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Command header: accent prompt + mono command (selectable).
-            SelectionContainer {
-                Text(
-                    text = "sunshine ❯ ${block.command}",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SunshineTokens.textPrimary,
-                )
-            }
-            // Origin + tier meta row.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BlockMetaChip(
-                    text = if (block.origin == "agent") "agent" else "human",
-                    accent = block.origin == "agent",
-                )
-                if (block.tier != RiskTier.SAFE) {
-                    BlockMetaChip(
-                        text = if (block.tier == RiskTier.DESTRUCTIVE) "tier 3" else "tier 2",
-                        accent = block.tier == RiskTier.DESTRUCTIVE,
+    // Chat layout: user command bubble RIGHT (white #ffffff, rounded),
+    // guest result card LEFT (surfaceVariant, as before).
+    // Long-press anywhere on the block opens copy actions (command / output /
+    // all). Free-form select + select-all handles come from the
+    // SelectionContainers below; paste lives in the input field.
+    var menu by remember(block.id) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val outputText = remember(block.lines) { block.lines.joinToString("\n") }
+    Box {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { menu = true },
+                ),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+        // Outgoing: right-aligned white bubble.
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            Card(
+                shape = SunshineShape.canvas,
+                colors = CardDefaults.cardColors(containerColor = SunshineTokens.chatBubbleBg),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(1.dp, SunshineTokens.strokeBorder),
+                modifier = Modifier.fillMaxWidth(0.85f),
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = block.command,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SunshineTokens.chatBubbleText,
+                        modifier = Modifier.padding(12.dp),
                     )
                 }
-                if (block.powerSaver) {
-                    BlockMetaChip(text = "power saver", accent = true)
-                }
             }
-            // Output body with collapse.
-            OutputBody(block = block)
-            // Status footer.
-            BlockFooter(block = block)
+        }
+        // Incoming: left-aligned result, unchanged styling.
+        Card(
+            shape = SunshineShape.canvas,
+            colors = CardDefaults.cardColors(containerColor = SunshineTokens.surfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = when (block.status) {
+                BlockStatus.FAILED -> BorderStroke(1.dp, SunshineTokens.error)
+                BlockStatus.DENIED -> BorderStroke(1.dp, SunshineTokens.strokeBorderLight)
+                else -> null
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                // Origin + tier meta row.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BlockMetaChip(
+                        text = if (block.origin == "agent") "agent" else "human",
+                        accent = block.origin == "agent",
+                    )
+                    if (block.tier != RiskTier.SAFE) {
+                        BlockMetaChip(
+                            text = if (block.tier == RiskTier.DESTRUCTIVE) "tier 3" else "tier 2",
+                            accent = block.tier == RiskTier.DESTRUCTIVE,
+                        )
+                    }
+                    if (block.powerSaver) {
+                        BlockMetaChip(text = "power saver", accent = true)
+                    }
+                }
+                // Output body with collapse.
+                OutputBody(block = block)
+                // Status footer.
+                BlockFooter(block = block)
+            }
+        }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("Copy command") },
+                onClick = {
+                    clipboard.setText(AnnotatedString(block.command))
+                    menu = false
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Copy output") },
+                enabled = outputText.isNotEmpty(),
+                onClick = {
+                    clipboard.setText(AnnotatedString(outputText))
+                    menu = false
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Copy all") },
+                onClick = {
+                    clipboard.setText(AnnotatedString("sunshine ❯ ${block.command}\n$outputText"))
+                    menu = false
+                },
+            )
         }
     }
 }

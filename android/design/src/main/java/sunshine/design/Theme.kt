@@ -22,6 +22,9 @@ object SunshineTokens {
     val onPrimaryAccent = Color(0xFF161610)
     val strokeBorder = Color(0xFF161610)
     val strokeBorderLight = Color(0xFFE0E0D6)
+    val inputBorder = Color(0xFF161616)
+    val chatBubbleBg = Color(0xFFFFE8CF)
+    val chatBubbleText = Color(0xFF794C12)
     val error = Color(0xFFC62828)
 }
 

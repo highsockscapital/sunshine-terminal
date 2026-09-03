@@ -18,8 +18,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +82,18 @@ fun RiskApprovalCard(
                 RiskRow(label = "Risk", value = if (request.tier == RiskTier.DESTRUCTIVE) "Tier 3 — data loss, privilege, or exposure possible" else "Tier 2 — changes guest state")
                 RiskRow(label = "Origin", value = if (request.origin == "agent") "Agent autonomous command" else "Your command")
                 RiskRow(label = "Why flagged", value = request.reason)
+                // Tier 3 mirrors the CLI's explicit gate (vm.js: type YES):
+                // a single tap must never fire a destructive command.
+                var confirmText by remember(request.blockId, request.command) { mutableStateOf("") }
+                if (request.explicit) {
+                    OutlinedTextField(
+                        value = confirmText,
+                        onValueChange = { confirmText = it },
+                        placeholder = { Text("Type YES to confirm") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -86,6 +103,7 @@ fun RiskApprovalCard(
                     }
                     Button(
                         onClick = onApprove,
+                        enabled = !request.explicit || confirmText.trim() == "YES",
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (request.explicit) SunshineTokens.error else SunshineTokens.primaryAccent,

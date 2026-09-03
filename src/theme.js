@@ -14,6 +14,9 @@ export const tokens = {
   onPrimaryAccent: '#161610',
   strokeBorder: '#161610',
   strokeBorderLight: '#E0E0D6',
+  inputBorder: '#161616',
+  chatBubbleBg: '#FFE8CF',
+  chatBubbleText: '#794C12',
   error: '#C62828',
 };
 

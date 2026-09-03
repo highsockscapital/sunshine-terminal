@@ -47,4 +47,5 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.kotlinx.coroutines)
+    testImplementation("junit:junit:4.13.2")
 }

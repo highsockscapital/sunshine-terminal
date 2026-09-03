@@ -7,6 +7,7 @@ package sunshine.terminal
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -75,21 +77,27 @@ fun TouchActionRail(
     onControl: (ControlKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(railActionsFor(context)) { action ->
-            when (action) {
-                is RailAction.Control -> FilterChip(
-                    selected = false,
-                    onClick = { onControl(action.key) },
-                    label = { Text(action.label) },
-                )
-                is RailAction.Insert -> AssistChip(
-                    onClick = { onInsert(action.text) },
-                    label = { Text(action.label) },
-                )
+    // Always mounted (never gated on keyboard state) and horizontally
+    // scrollable — parent keeps it above the IME via imePadding, so chips
+    // stay tappable while typing. key(context) resets scroll on switch.
+    key(context) {
+        LazyRow(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 2.dp),
+        ) {
+            items(railActionsFor(context)) { action ->
+                when (action) {
+                    is RailAction.Control -> FilterChip(
+                        selected = false,
+                        onClick = { onControl(action.key) },
+                        label = { Text(action.label) },
+                    )
+                    is RailAction.Insert -> AssistChip(
+                        onClick = { onInsert(action.text) },
+                        label = { Text(action.label) },
+                    )
+                }
             }
         }
     }
