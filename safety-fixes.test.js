@@ -87,13 +87,18 @@ describe('microdroid positional validation', () => {
     const deps = payloadDeps({
       binary: 'libpayload.so', app: '/a.apk', idsig: '/a.idsig', instanceImg: '/i.img',
     });
+    const origRunHost = deps.runHost.bind(deps);
     deps.runHost = async (command, args = [], opts = {}) => {
+      if (command === 'getprop' || String(command).endsWith('/getprop')) {
+        return origRunHost(command, args, opts);
+      }
       deps._runs.push({ command, args, opts });
       return { ok: true, code: 0, stdout: 'ok\n', stderr: '', reason: null };
     };
     const res = await createMicrodroidEngine(deps).exec('uname -a');
     assert.equal(res.ok, true);
-    const call = deps._runs[0];
+    const call = deps._runs.find((r) => r.args.includes('/a.apk'));
+    assert.ok(call, 'vm tool should have been invoked with the app positional');
     const appIdx = call.args.indexOf('/a.apk');
     assert.ok(appIdx > 0);
     assert.deepEqual(call.args.slice(appIdx, appIdx + 3), ['/a.apk', '/a.idsig', '/i.img']);
