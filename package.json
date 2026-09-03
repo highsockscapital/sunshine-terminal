@@ -1,7 +1,7 @@
 {
-  "name": "sunshine-cli",
+  "name": "sunshine-terminal",
   "version": "1.0.0",
-  "description": "SunshineCLI: Dual-runtime (Bionic + Android 16 AVF Linux VM) terminal & workspace manager",
+  "description": "Sunshine Terminal: AVF-native Debian guest workspace manager",
   "type": "module",
   "bin": {
     "scli": "./bin/scli.js",
@@ -9,7 +9,8 @@
   },
   "main": "src/index.js",
   "scripts": {
-    "start": "node bin/scli.js"
+    "start": "node bin/scli.js",
+    "test": "node --test"
   },
   "dependencies": {},
   "devDependencies": {}

@@ -1,4 +1,4 @@
-// SunshineCLI Local Bionic (Termux) Runtime Execution
+// Sunshine Terminal Local Bionic (Termux) Runtime Execution
 import { spawn } from 'child_process';
 import { info, success, error, colors } from '../ui.js';
 

@@ -1,0 +1,26 @@
+# Sunshine nftables policy (installed to /etc/nftables.d/sunshine.nft and
+# included from the main ruleset — additive only, never flushes).
+# Inbound: deny everything except established/related, loopback, and the
+# guest sshd port (22) that serves the host channel. Forward: allow
+# established flows and container bridges (docker0, br-*, cni*, veth*) so
+# Docker keeps working; drop and log the rest. Outbound stays open by
+# default; the optional lockdown profile appends the outbound chain.
+table inet sunshine {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    ct state established,related accept
+    iif "lo" accept
+    tcp dport 22 accept
+    icmp type echo-request limit rate 5/second accept
+    log prefix "sunshine-drop-in: " limit rate 5/minute
+  }
+
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    ct state established,related accept
+    # Docker / container bridges must forward or containers lose networking.
+    iifname { "docker0", "br-*", "cni*", "veth*" } accept
+    oifname { "docker0", "br-*", "cni*", "veth*" } accept
+    log prefix "sunshine-drop-fwd: " limit rate 5/minute
+  }
+}
