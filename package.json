@@ -1,0 +1,16 @@
+{
+  "name": "sunshine-cli",
+  "version": "1.0.0",
+  "description": "SunshineCLI: Dual-runtime (Bionic + Android 16 AVF Linux VM) terminal & workspace manager",
+  "type": "module",
+  "bin": {
+    "scli": "./bin/scli.js",
+    "sunshine": "./bin/scli.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node bin/scli.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
