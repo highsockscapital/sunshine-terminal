@@ -14,6 +14,7 @@ package sunshine.terminal
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,13 @@ sealed interface ChannelOutcome {
     data class Denied(val reason: String) : ChannelOutcome
     data class LoopPaused(val steps: Int, val cap: Int) : ChannelOutcome
 }
+
+/** Silent first-run decision: boot only when the host can (nothing missing)
+ *  and no session token exists yet. Already-booted guests (hasToken) and
+ *  hosts missing prerequisites (image/kernel/crosvm/ssh) are left alone —
+ *  the latter shows a calm hint instead of error spam. Pure + unit-tested. */
+internal fun shouldAutoBoot(status: GuestStatus): Boolean =
+    status.missing.isEmpty() && !status.hasToken
 
 /** Transport port. Production impl: Kotlin VSOCK multiplexer over the
  *  host↔guest channel (token handshake + ring-buffered stdout/stderr). */
@@ -94,6 +102,7 @@ class TerminalViewModel(
     private var streamJob: Job? = null
     private var railContext = RailContext.DEFAULT
     private val sessionIds = AtomicLong(1L)
+    private var firstRunAutoBootAttempted = false
 
     private fun newSessionId(): String = "s${sessionIds.getAndIncrement()}"
 
@@ -135,6 +144,82 @@ class TerminalViewModel(
         }
         refreshWorkspace(".")
         refreshGuestStatus()
+        autoBootIfNeeded()
+    }
+
+    /**
+     * Silent first-launch flow: if the pVM prerequisites are present but no
+     * session token exists, boot + provision in the background so the canvas
+     * drops straight to `sunshine >` with the file tree loaded. Manual
+     * Boot/Provision buttons remain as a debug fallback.
+     * Idempotent — runs at most once per ViewModel lifetime.
+     */
+    fun autoBootIfNeeded() {
+        if (firstRunAutoBootAttempted) return
+        firstRunAutoBootAttempted = true
+        viewModelScope.launch {
+            val status = try {
+                channel.guestStatus()
+            } catch (e: Exception) {
+                GuestStatus(missing = listOf(e.message ?: "status-failed"))
+            }
+            _state.update { it.copy(guest = status) }
+            if (!shouldAutoBoot(status)) {
+                if (status.missing.isNotEmpty()) {
+                    val hint = status.missing.firstOrNull()?.take(90)
+                    _state.update {
+                        it.copy(guestOp = "First-run setup: $hint — guest starts automatically once ready.")
+                    }
+                }
+                return@launch
+            }
+            _state.update { it.copy(guestOp = "Starting Sunshine VM…") }
+            val boot = try {
+                channel.bootGuest()
+            } catch (e: Exception) {
+                GuestOpResult(ok = false, remediation = e.message ?: "boot-failed")
+            }
+            refreshGuestStatus()
+            if (!boot.ok) {
+                _state.update {
+                    it.copy(guestOp = boot.remediation ?: "Boot failed — retry from the Guest section.")
+                }
+                return@launch
+            }
+            // Guest sshd needs ~30s after crosvm spawn. Retry provision a
+            // few times with backoff instead of failing loudly.
+            var provision: GuestOpResult? = null
+            val delays = listOf(0L, 15_000L, 20_000L)
+            for ((attempt, waitMs) in delays.withIndex()) {
+                if (waitMs > 0) {
+                    _state.update {
+                        it.copy(guestOp = "Starting Sunshine VM… (warming up ${attempt + 1}/${delays.size})")
+                    }
+                    delay(waitMs)
+                }
+                provision = try {
+                    channel.provisionGuest()
+                } catch (e: Exception) {
+                    GuestOpResult(ok = false, remediation = e.message ?: "provision-failed")
+                }
+                if (provision.ok) break
+                val retryable = (provision.remediation ?: "") .let { msg ->
+                    msg.contains("not reachable", ignoreCase = true) ||
+                        msg.contains("Bundle transfer failed", ignoreCase = true) ||
+                        msg.contains("timeout", ignoreCase = true)
+                }
+                if (!retryable) break
+            }
+            refreshGuestStatus()
+            val ok = provision?.ok == true
+            _state.update {
+                it.copy(
+                    guestOp = if (ok) null else provision?.remediation
+                        ?: "Provisioning — retry from the Guest section.",
+                )
+            }
+            refreshWorkspace(_state.value.workspace.cwd)
+        }
     }
 
     fun toggleSidebar() {

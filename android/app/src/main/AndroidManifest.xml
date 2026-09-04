@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".SunshineApp"
         android:label="Sunshine Terminal"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 

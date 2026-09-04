@@ -9,7 +9,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import sunshine.design.sunshineColorScheme
 import sunshine.design.sunshineTypography
-import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -21,19 +20,18 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                val vmDir = File(filesDir, "sunshine-vm").also { it.mkdirs() }
-                // Unpack the guest bundle (assets/guest) so provision can
-                // push sunshine-exec + slice + nftables into the pVM.
-                val bundleDir = File(filesDir, "guest-bundle").also { it.mkdirs() }
+                // Silent first-run setup: VmProvisioner unpacks assets/guest
+                // (idempotent, best-effort). SunshineApp already kicked this
+                // off in the background; re-run here so the bundle is ready
+                // even on a cold process that skipped Application init in
+                // tests/previews.
+                val appCtx = applicationContext
                 try {
-                    val names = assets.list("guest") ?: emptyArray()
-                    for (n in names) {
-                        assets.open("guest/$n").use { inp ->
-                            File(bundleDir, n).outputStream().use { out -> inp.copyTo(out) }
-                        }
-                    }
+                    VmProvisioner.ensureProvisioned(appCtx)
                 } catch (_: Exception) {
                 }
+                val vmDir = VmProvisioner.vmDir(appCtx).also { it.mkdirs() }
+                val bundleDir = VmProvisioner.bundleDir(appCtx).also { it.mkdirs() }
                 // stateDir backs the persisted agent-step counter, JSONL
                 // audit log, and ssh known_hosts pinning.
                 val channel = VsockGuestChannel(
