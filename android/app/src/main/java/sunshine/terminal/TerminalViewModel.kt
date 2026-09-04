@@ -73,6 +73,14 @@ interface GuestChannel {
     /** File preview for the drawer right panel (drawer.js previewLinesFor). */
     suspend fun readWorkspaceFile(path: String): FileContent =
         FileContent(path = path, lines = emptyList())
+    /** Boot prerequisites probe (sshd image/kernel/crosvm/token). */
+    suspend fun guestStatus(): GuestStatus = GuestStatus()
+    /** Boot the Debian guest (crosvm + session token). */
+    suspend fun bootGuest(): GuestOpResult =
+        GuestOpResult(ok = false, remediation = "boot unsupported")
+    /** Provision the guest bundle (sunshine-exec + token + firewall). */
+    suspend fun provisionGuest(): GuestOpResult =
+        GuestOpResult(ok = false, remediation = "provision unsupported")
 }
 
 class TerminalViewModel(
@@ -126,6 +134,7 @@ class TerminalViewModel(
             )
         }
         refreshWorkspace(".")
+        refreshGuestStatus()
     }
 
     fun toggleSidebar() {
@@ -217,6 +226,48 @@ class TerminalViewModel(
         }
     }
 
+    fun refreshGuestStatus() {
+        viewModelScope.launch {
+            val g = try {
+                channel.guestStatus()
+            } catch (e: Exception) {
+                GuestStatus(missing = listOf(e.message ?: "status-failed"))
+            }
+            _state.update { it.copy(guest = g) }
+        }
+    }
+
+    fun bootGuest() {
+        viewModelScope.launch {
+            _state.update { it.copy(guestOp = "Booting…") }
+            val res = try {
+                channel.bootGuest()
+            } catch (e: Exception) {
+                GuestOpResult(ok = false, remediation = e.message)
+            }
+            _state.update {
+                it.copy(guestOp = res.note ?: res.remediation ?: if (res.ok) "Boot requested." else "Boot failed.")
+            }
+            refreshGuestStatus()
+            refreshWorkspace(_state.value.workspace.cwd)
+        }
+    }
+
+    fun provisionGuest() {
+        viewModelScope.launch {
+            _state.update { it.copy(guestOp = "Provisioning…") }
+            val res = try {
+                channel.provisionGuest()
+            } catch (e: Exception) {
+                GuestOpResult(ok = false, remediation = e.message)
+            }
+            _state.update {
+                it.copy(guestOp = res.note ?: res.remediation ?: if (res.ok) "Provisioned." else "Provision failed.")
+            }
+            refreshGuestStatus()
+            refreshWorkspace(_state.value.workspace.cwd)
+        }
+    }
     fun refreshWorkspace(path: String = ".") {
         viewModelScope.launch {
             val listing = try {

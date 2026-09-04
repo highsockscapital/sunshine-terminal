@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import sunshine.design.SunshineTokens
+import sunshine.design.SunshineType
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -49,6 +50,8 @@ fun SessionSidebar(
     onRefreshWorkspace: () -> Unit,
     onWorkspaceParent: () -> Unit,
     onOpenWorkspace: (WorkspaceEntry) -> Unit,
+    onBootGuest: () -> Unit = {},
+    onProvisionGuest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -64,15 +67,6 @@ fun SessionSidebar(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "brand") { BrandHeader() }
-        // ---- Sessions ----
-        item(key = "sessions-header") {
-            Text(
-                text = "Sessions (${state.sessions.size})",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = SunshineTokens.textPrimary,
-            )
-        }
         if (state.sessions.isEmpty()) {
             item(key = "sessions-empty") {
                 Text(
@@ -104,14 +98,12 @@ fun SessionSidebar(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = sess.title,
-                                fontSize = 13.sp,
+                                style = SunshineType.messageText,
                                 fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                color = SunshineTokens.textPrimary,
                             )
                             Text(
                                 text = "${sess.blocks.size} blocks · ${sess.history.size} cmds",
-                                fontSize = 11.sp,
-                                color = SunshineTokens.textSecondary,
+                                style = SunshineType.metadata,
                             )
                         }
                         if (state.sessions.size > 1) {
@@ -146,11 +138,55 @@ fun SessionSidebar(
         }
         item(key = "new-session") {
             OutlinedButton(onClick = onCreateSession, modifier = Modifier.fillMaxWidth()) {
-                Text("+ New session", fontSize = 13.sp)
+                Text("+ New session", style = SunshineType.button, color = SunshineTokens.textPrimary)
             }
         }
 
         item(key = "divider") { HorizontalDivider() }
+
+        // ---- Guest pVM ----
+        item(key = "guest-header") {
+            val ready = state.guest.missing.isEmpty()
+            Text(
+                text = if (ready) "GUEST · READY" else "GUEST · NOT BOOTED",
+                style = SunshineType.sectionHeader,
+            )
+        }
+        if (state.guest.missing.isNotEmpty()) {
+            item(key = "guest-missing") {
+                Text(
+                    text = "Missing: ${state.guest.missing.joinToString(", ")}",
+                    style = SunshineType.metadata,
+                )
+            }
+        } else {
+            item(key = "guest-ready") {
+                Text(
+                    text = "Channel port ${state.guest.sshPort ?: "?"} · " +
+                        if (state.guest.hasToken) "token issued" else "no token",
+                    style = SunshineType.metadata,
+                )
+            }
+        }
+        item(key = "guest-buttons") {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(onClick = onBootGuest, modifier = Modifier.weight(1f)) {
+                    Text("Boot pVM", style = SunshineType.button, color = SunshineTokens.textPrimary)
+                }
+                OutlinedButton(onClick = onProvisionGuest, modifier = Modifier.weight(1f)) {
+                    Text("Provision", style = SunshineType.button, color = SunshineTokens.textPrimary)
+                }
+            }
+        }
+        state.guestOp?.let { op ->
+            item(key = "guest-op") {
+                Text(text = op, style = SunshineType.metadata)
+            }
+        }
+        item(key = "divider2") { HorizontalDivider() }
 
         // ---- Filetree ----
         item(key = "files-header") {

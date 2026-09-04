@@ -1,0 +1,13 @@
+[Unit]
+Description=Sunshine agent command slice (cgroup caps)
+Before=slices.target
+
+[Slice]
+# Hard caps so an autonomous agent can never freeze the host:
+# RAM, CPU share, task count (fork-bomb backstop), open files.
+MemoryMax=2G
+MemoryHigh=1536M
+CPUQuota=80%
+TasksMax=512
+LimitNOFILE=4096
+LimitNPROC=512

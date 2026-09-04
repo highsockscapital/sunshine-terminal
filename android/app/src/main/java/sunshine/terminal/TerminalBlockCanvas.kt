@@ -77,8 +77,9 @@ fun TerminalBlockCanvas(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TerminalBlockCard(block: TerminalBlock) {
-    // Chat layout: user command bubble RIGHT (white #ffffff, rounded),
-    // guest result card LEFT (surfaceVariant, as before).
+    // Chat layout per design system: User bubble RIGHT (surfaceVariant,
+    // 1dp strokeBorderLight, 16dp, 1dp elevation), tool-output block LEFT
+    // (surfaceVariant, 1dp strokeBorder, 12dp, flat).
     // Long-press anywhere on the block opens copy actions (command / output /
     // all). Free-form select + select-all handles come from the
     // SelectionContainers below; paste lives in the input field.
@@ -93,18 +94,18 @@ fun TerminalBlockCard(block: TerminalBlock) {
                     onClick = {},
                     onLongClick = { menu = true },
                 ),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-        // Outgoing: right-aligned white bubble.
+        // Outgoing user bubble.
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.CenterEnd,
         ) {
             Card(
-                shape = SunshineShape.canvas,
-                colors = CardDefaults.cardColors(containerColor = SunshineTokens.chatBubbleBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, SunshineTokens.strokeBorder),
+                shape = SunshineShape.modal,
+                colors = CardDefaults.cardColors(containerColor = SunshineTokens.surfaceVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                border = BorderStroke(1.dp, SunshineTokens.strokeBorderLight),
                 modifier = Modifier.fillMaxWidth(0.85f),
             ) {
                 SelectionContainer {
@@ -113,26 +114,29 @@ fun TerminalBlockCard(block: TerminalBlock) {
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
+                        letterSpacing = 0.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SunshineTokens.chatBubbleText,
-                        modifier = Modifier.padding(12.dp),
+                        color = SunshineTokens.textPrimary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                     )
                 }
             }
         }
-        // Incoming: left-aligned result, unchanged styling.
+        // Incoming tool-output block.
         Card(
             shape = SunshineShape.canvas,
             colors = CardDefaults.cardColors(containerColor = SunshineTokens.surfaceVariant),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             border = when (block.status) {
                 BlockStatus.FAILED -> BorderStroke(1.dp, SunshineTokens.error)
-                BlockStatus.DENIED -> BorderStroke(1.dp, SunshineTokens.strokeBorderLight)
-                else -> null
+                else -> BorderStroke(1.dp, SunshineTokens.strokeBorder)
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(
+                modifier = Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 // Origin + tier meta row.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     BlockMetaChip(

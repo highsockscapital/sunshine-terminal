@@ -28,6 +28,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +40,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +56,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import sunshine.design.SunshineShape
 import sunshine.design.SunshineTokens
+import sunshine.design.SunshineType
 
 @Composable
 fun TerminalScreen(
@@ -79,6 +83,8 @@ fun TerminalScreen(
         onSwitchSession = viewModel::switchSession,
         onDeleteSession = viewModel::deleteSession,
         onRenameSession = viewModel::renameSession,
+        onBootGuest = viewModel::bootGuest,
+        onProvisionGuest = viewModel::provisionGuest,
         modifier = modifier,
     )
 }
@@ -103,6 +109,8 @@ fun TerminalScreenContent(
     onSwitchSession: (String) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
     onRenameSession: (String, String) -> Unit = { _, _ -> },
+    onBootGuest: () -> Unit = {},
+    onProvisionGuest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -123,7 +131,10 @@ fun TerminalScreenContent(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                drawerContainerColor = SunshineTokens.windowBackground,
+                drawerShape = SunshineShape.sheet,
+            ) {
                 SessionSidebar(
                     state = state,
                     onCreateSession = onCreateSession,
@@ -133,6 +144,8 @@ fun TerminalScreenContent(
                     },
                     onDeleteSession = onDeleteSession,
                     onRenameSession = onRenameSession,
+                    onBootGuest = onBootGuest,
+                    onProvisionGuest = onProvisionGuest,
                     onRefreshWorkspace = onRefreshWorkspace,
                     onWorkspaceParent = onWorkspaceParent,
                     onOpenWorkspace = onOpenWorkspace,
@@ -148,7 +161,7 @@ fun TerminalScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Top bar: circular sidebar button (white bg, dark border, icon).
@@ -180,9 +193,7 @@ fun TerminalScreenContent(
                     StatusBanner(state = state)
                     Text(
                         text = "$activeTitle · ${state.workspace.cwd} (${state.workspace.entries.size})",
-                        fontFamily = FontFamily.Default,
-                        fontSize = 11.sp,
-                        color = SunshineTokens.textSecondary,
+                        style = SunshineType.metadata,
                     )
                 }
             }
@@ -213,7 +224,7 @@ fun TerminalScreenContent(
                                 contentColor = SunshineTokens.onPrimaryAccent,
                             ),
                         ) {
-                            Text("Continue")
+                            Text("Continue", style = SunshineType.button)
                         }
                     }
                 }
@@ -234,10 +245,14 @@ fun TerminalScreenContent(
                     onInsert = onRailInsert,
                     onControl = onRailControl,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     OutlinedTextField(
                         value = state.input,
                         onValueChange = onInputChange,
+                        textStyle = SunshineType.messageText,
                         placeholder = {
                             Text(
                                 "sunshine ❯",
@@ -253,9 +268,9 @@ fun TerminalScreenContent(
                             focusedContainerColor = SunshineTokens.cardSurface,
                             unfocusedContainerColor = SunshineTokens.cardSurface,
                             disabledContainerColor = SunshineTokens.cardSurface,
-                            focusedBorderColor = SunshineTokens.inputBorder,
-                            unfocusedBorderColor = SunshineTokens.inputBorder,
-                            disabledBorderColor = SunshineTokens.inputBorder,
+                            focusedBorderColor = SunshineTokens.strokeBorder,
+                            unfocusedBorderColor = SunshineTokens.strokeBorderLight,
+                            disabledBorderColor = SunshineTokens.strokeBorderLight,
                             focusedTextColor = SunshineTokens.textPrimary,
                             unfocusedTextColor = SunshineTokens.textPrimary,
                             disabledTextColor = SunshineTokens.textPrimary,
@@ -265,14 +280,21 @@ fun TerminalScreenContent(
                         ),
                         modifier = Modifier.weight(1f),
                     )
-                    Button(
+                    // Send: primaryAccent fill, onPrimaryAccent icon, circular.
+                    Surface(
+                        shape = CircleShape,
+                        color = SunshineTokens.primaryAccent,
+                        modifier = Modifier.size(48.dp),
                         onClick = onSend,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SunshineTokens.primaryAccent,
-                            contentColor = SunshineTokens.onPrimaryAccent,
-                        ),
                     ) {
-                        Text("Send")
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = SunshineTokens.onPrimaryAccent,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }

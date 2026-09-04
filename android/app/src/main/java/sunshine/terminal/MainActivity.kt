@@ -22,9 +22,24 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val vmDir = File(filesDir, "sunshine-vm").also { it.mkdirs() }
+                // Unpack the guest bundle (assets/guest) so provision can
+                // push sunshine-exec + slice + nftables into the pVM.
+                val bundleDir = File(filesDir, "guest-bundle").also { it.mkdirs() }
+                try {
+                    val names = assets.list("guest") ?: emptyArray()
+                    for (n in names) {
+                        assets.open("guest/$n").use { inp ->
+                            File(bundleDir, n).outputStream().use { out -> inp.copyTo(out) }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
                 // stateDir backs the persisted agent-step counter, JSONL
                 // audit log, and ssh known_hosts pinning.
-                val channel = VsockGuestChannel(SshGuestTransport(vmDir), stateDir = vmDir)
+                val channel = VsockGuestChannel(
+                    SshGuestTransport(vmDir, bundleDir = bundleDir),
+                    stateDir = vmDir,
+                )
                 return TerminalViewModel(channel) as T
             }
         }

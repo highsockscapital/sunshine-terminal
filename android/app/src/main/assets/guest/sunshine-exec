@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# sunshine-exec — guest-side exec gate (installed to /usr/local/bin).
+# Protocol (stdin):
+#   line 1: session token
+#   line 2: origin (human|agent)
+#   rest:   command text (may be multi-line)
+# Validates the token against /run/sunshine/session-token (tmpfs, 0600),
+# re-checks destructive patterns (backstop for the host classifier), and
+# runs agent-origin commands under the sunshine-agent.slice cgroup caps.
+# Auth failures print SUNSHINE-AUTH-DENIED to stderr and exit 126.
+set -u
+
+TOKEN_FILE="/run/sunshine/session-token"
+
+fail_auth() {
+  echo "SUNSHINE-AUTH-DENIED: $1" >&2
+  exit 126
+}
+
+[ -f "$TOKEN_FILE" ] || fail_auth "no session token installed"
+EXPECTED="$(cat "$TOKEN_FILE")"
+[ -n "$EXPECTED" ] || fail_auth "empty session token"
+
+IFS= read -r GOT_TOKEN || fail_auth "missing token line"
+IFS= read -r ORIGIN || ORIGIN="human"
+CMD="$(cat)"
+
+[ "$GOT_TOKEN" = "$EXPECTED" ] || fail_auth "token mismatch"
+[ -n "$CMD" ] || fail_auth "empty command"
+
+# --- Catastrophic-only backstop (lowercased, dequoted, unescaped) ---
+# Everything else (sudo, reboot, rm -rf, pipes-to-shell, firewall tools)
+# is owned by the host Tier-3 confirmation gate + session token. The shim
+# blocks only what no confirmation can make safe: host-escape attempts,
+# hardware manipulation, and raw disk destruction.
+NORM="$(printf '%s' "$CMD" | tr '[:upper:]' '[:lower:]' | tr -d '\\' | tr -d '\042' | tr -d "'")"
+case "$NORM" in
+  *mkfs*|*dd\ *of=/dev*|*of=/dev/sd*|*of=/dev/hd*|*of=/dev/vd*|*of=/dev/nvme*|\
+  *\>\ */dev/sd*|*\>\ */dev/hd*|*\>\ */dev/vd*|*\>\ */dev/nvme*|\
+  *:\(\)*|*qemu\ *|*virsh\ *|*/dev/kvm*|*/dev/mem*|*/dev/kmem*|*hdparm*|*nvme\ *format*)
+    echo "SUNSHINE-DENIED: catastrophic pattern blocked guest-side" >&2
+    exit 125
+    ;;
+esac
+
+if [ "$ORIGIN" = "agent" ]; then
+  if command -v systemd-run >/dev/null 2>&1; then
+    exec systemd-run --quiet --pipe --wait --slice=sunshine-agent.slice \
+      --property=MemoryMax=2G --property=CPUQuota=80% --property=TasksMax=512 \
+      /bin/bash -c "$CMD"
+  fi
+  # No systemd (container-ish guest): fall back to ulimit confinement.
+  ulimit -u 512 2>/dev/null || true
+  ulimit -f 2097152 2>/dev/null || true
+  exec /bin/bash -c "$CMD"
+else
+  exec /bin/bash -c "$CMD"
+fi

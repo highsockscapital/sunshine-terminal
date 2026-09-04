@@ -1,8 +1,9 @@
 // Sunshine Design System — single source of truth (CLI + Android app)
 // Tokens: windowBackground, textPrimary, textSecondary, cardSurface,
 // surfaceVariant, primaryAccent, onPrimaryAccent, strokeBorder,
-// strokeBorderLight, error. Shape 8/12/16/24dp. Elevation 0/1dp.
-// Type: Inter labels, Monospace 13sp/18sp terminal/code.
+// strokeBorderLight, inputBorder, error. Shape 8/12/16/20/24dp.
+// Elevation 0/1/4/8dp. Type: Inter labels + role scale, Monospace
+// 13sp/18sp terminal/code.
 
 export const tokens = {
   windowBackground: '#F6F3E7',
@@ -15,28 +16,35 @@ export const tokens = {
   strokeBorder: '#161610',
   strokeBorderLight: '#E0E0D6',
   inputBorder: '#161616',
-  chatBubbleBg: '#FFE8CF',
-  chatBubbleText: '#794C12',
   error: '#C62828',
 };
 
 export const shape = {
   badge: 8, // inline badges
   canvas: 12, // terminal canvas & code blocks
-  modal: 16, // workspace modals
+  modal: 16, // message bubbles & system action cards
+  sheet: 20, // bottom sheets, model selector drawer
   fab: 24, // floating action controls
 };
 
 export const elevation = {
-  flat: 0, // terminal grid / embedded containers
+  flat: 0, // message stream / embedded containers
+  bubble: 1, // message bubbles, input field
   sidebar: 1, // floating file manager sidebar
+  toast: 4, // system toasts, floating tools overlay
+  sheet: 8, // bottom sheets, settings modals
 };
 
 export const typography = {
   label: 'Inter',
   mono: 'Monospace',
+  screenTitle: { sizeSp: 20, lineHeightSp: 26, letterSpacingSp: -0.2, weight: 700 },
+  sectionHeader: { sizeSp: 12, lineHeightSp: 16, letterSpacingSp: 0.8, weight: 600, uppercase: true },
+  messageText: { sizeSp: 14, lineHeightSp: 20, letterSpacingSp: 0.25, weight: 400 },
   monoSizeSp: 13,
   monoLineHeightSp: 18,
+  metadata: { sizeSp: 11, lineHeightSp: 14, letterSpacingSp: 0.4, weight: 500 },
+  button: { sizeSp: 14, lineHeightSp: 20, letterSpacingSp: 0.5, weight: 600 },
 };
 
 export function hexToRgb(hex) {

@@ -93,4 +93,6 @@ data class TerminalUiState(
     val activeSessionId: String? = null,
     val workspace: WorkspaceListing = WorkspaceListing(),
     val selectedFile: FileContent? = null,
+    val guest: GuestStatus = GuestStatus(),
+    val guestOp: String? = null,
 )

@@ -1,5 +1,7 @@
 // Sunshine Design System — Android Compose spec (generated from src/tokens.json)
 // Do not hand-edit hex values here; edit tokens.json + src/theme.js instead.
+// Type: Inter labels (FontFamily.Default maps to the system high-legibility
+// sans — Roboto on Pixel — until Inter is bundled), Monospace 13sp/18sp code.
 package sunshine.design
 
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,6 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -23,22 +26,75 @@ object SunshineTokens {
     val strokeBorder = Color(0xFF161610)
     val strokeBorderLight = Color(0xFFE0E0D6)
     val inputBorder = Color(0xFF161616)
-    val chatBubbleBg = Color(0xFFFFE8CF)
-    val chatBubbleText = Color(0xFF794C12)
     val error = Color(0xFFC62828)
 }
 
 object SunshineShape {
     val badge = RoundedCornerShape(8.dp)
     val canvas = RoundedCornerShape(12.dp) // terminal canvas & code blocks
-    val modal = RoundedCornerShape(16.dp)
+    val modal = RoundedCornerShape(16.dp) // message bubbles & action cards
+    val sheet = RoundedCornerShape(20.dp) // bottom sheets, selector drawer
     val fab = RoundedCornerShape(24.dp)
 }
 
-// Elevation: flat 0dp terminal grid/embedded, 1dp file-manager sidebar.
+// Elevation: flat 0dp stream/code, 1dp bubbles/input/sidebar,
+// 4dp toasts/overlays, 8dp sheets/modals.
 object SunshineElevation {
     const val flat = 0
+    const val bubble = 1
     const val sidebar = 1
+    const val toast = 4
+    const val sheet = 8
+}
+
+// Type roles: Inter/system-sans labels, Monospace code.
+object SunshineType {
+    val screenTitle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+        letterSpacing = (-0.2).sp,
+        color = SunshineTokens.textPrimary,
+    )
+    val sectionHeader = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.8.sp,
+        color = SunshineTokens.textPrimary,
+    )
+    val messageText = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.25.sp,
+        color = SunshineTokens.textPrimary,
+    )
+    val code = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.sp,
+        color = SunshineTokens.textPrimary,
+    )
+    val metadata = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.4.sp,
+        color = SunshineTokens.textSecondary,
+    )
+    val button = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.5.sp,
+    )
 }
 
 fun sunshineColorScheme(): ColorScheme = lightColorScheme(

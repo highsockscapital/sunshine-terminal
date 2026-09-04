@@ -99,7 +99,7 @@ fun RiskApprovalCard(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     OutlinedButton(onClick = onDeny, modifier = Modifier.weight(1f)) {
-                        Text("Deny")
+                        Text("Deny", style = sunshine.design.SunshineType.button)
                     }
                     Button(
                         onClick = onApprove,
@@ -110,7 +110,10 @@ fun RiskApprovalCard(
                             contentColor = if (request.explicit) SunshineTokens.cardSurface else SunshineTokens.onPrimaryAccent,
                         ),
                     ) {
-                        Text(if (request.explicit) "Approve anyway" else "Approve")
+                        Text(
+                            if (request.explicit) "Approve anyway" else "Approve",
+                            style = sunshine.design.SunshineType.button,
+                        )
                     }
                 }
             }

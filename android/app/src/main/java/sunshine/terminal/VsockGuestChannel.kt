@@ -190,11 +190,34 @@ data class TransportResult(
     val reason: String? = null,
 )
 
+data class GuestOpResult(
+    val ok: Boolean,
+    val note: String? = null,
+    val remediation: String? = null,
+)
+
+data class GuestStatus(
+    val imagePresent: Boolean = false,
+    val kernelPresent: Boolean = false,
+    val crosvm: String? = null,
+    val sshPresent: Boolean = false,
+    val hasToken: Boolean = false,
+    val sshPort: Int? = null,
+    val missing: List<String> = emptyList(),
+)
+
 interface GuestTransport {
     suspend fun execFrame(frame: ByteArray, blockId: Long, timeoutMs: Long = 60_000L): TransportResult
     suspend fun ping(): Boolean
     /** Best-effort cancel of a running exec (CTRL_C). Default no-op. */
     suspend fun cancel(): Boolean = false
+    /** Probe boot prerequisites (default: unsupported transport). */
+    suspend fun guestStatus(): GuestStatus = GuestStatus(missing = listOf("unsupported-transport"))
+    /** Boot the guest (default: unsupported). */
+    suspend fun boot(): GuestOpResult = GuestOpResult(ok = false, remediation = "boot unsupported on this transport")
+    /** Provision the guest bundle (default: unsupported). */
+    suspend fun provision(): GuestOpResult =
+        GuestOpResult(ok = false, remediation = "provision unsupported on this transport")
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +290,7 @@ class SshGuestTransport(
     private val fallbackPort: Int = 2222,
     fallbackDirs: List<File> = listOf(File("/data/data/com.termux/files/home/.sunshine/vm")),
     private val knownHostsFile: File? = null,
+    private val bundleDir: File? = null,
 ) : GuestTransport {
 
     private val extraDirs: List<File> = fallbackDirs
@@ -388,7 +412,7 @@ class SshGuestTransport(
                 "sunshine-exec",
             )
             try {
-                val proc = ProcessBuilder(cmd)
+                val proc = spawn(cmd)
                     .redirectErrorStream(false)
                     .start()
                 running.set(proc)
@@ -443,12 +467,332 @@ class SshGuestTransport(
                 "$sshUser@127.0.0.1",
                 "true",
             )
-            val proc = ProcessBuilder(cmd).start()
+            val proc = spawn(cmd).start()
             val finished = proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
             finished && proc.exitValue() == 0
         } catch (_: Exception) {
             false
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Boot + provision (debian.js port). PATH includes Termux usr/bin so
+    // the app finds the Termux openssh client when present on-device.
+    // ------------------------------------------------------------------
+
+    override suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (!sshAvailable()) return@withContext false
+            val port = sshPort()
+            val cmd = baseSshArgs(port, 5) + listOf(
+                "$sshUser@127.0.0.1",
+                "true",
+            )
+            val proc = spawn(cmd).start()
+            val finished = proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            finished && proc.exitValue() == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun pathEnv(): String {
+        val sys = System.getenv("PATH") ?: "/system/bin:/vendor/bin"
+        val termux = "/data/data/com.termux/files/usr/bin"
+        return if (sys.split(":").contains(termux)) sys else "$termux:$sys"
+    }
+
+    private fun spawn(cmd: List<String>): ProcessBuilder {
+        val pb = ProcessBuilder(cmd).redirectErrorStream(false)
+        try {
+            pb.environment()["PATH"] = pathEnv()
+        } catch (_: Exception) {
+        }
+        return pb
+    }
+
+    private fun findBinary(name: String, extraAbs: List<String> = emptyList()): String? {
+        for (abs in extraAbs) {
+            try {
+                if (File(abs).exists()) return abs
+            } catch (_: Exception) {
+            }
+        }
+        return try {
+            val p = spawn(listOf("sh", "-c", "command -v $name")).start()
+            val ok = p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0
+            if (!ok) null
+            else p.inputStream.bufferedReader().readText().trim().ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun cfg(): JSONObject? = firstExisting("sunshine-vm.json")?.let { readJson(it) }
+
+    private fun guestImage(): String =
+        cfg()?.optString("image", "")?.ifEmpty { null } ?: File(vmDir, "debian.img").absolutePath
+
+    private fun guestKernel(): String =
+        cfg()?.optString("kernel", "")?.ifEmpty { null } ?: File(vmDir, "Image").absolutePath
+
+    private fun guestCid(): Int = cfg()?.optInt("cid", VSOCK_DEFAULT_CID) ?: VSOCK_DEFAULT_CID
+
+    private fun execLog(): String =
+        cfg()?.optString("execLog", "")?.ifEmpty { null } ?: File(vmDir, "debian-exec.log").absolutePath
+
+    private fun consoleLog(): String =
+        cfg()?.optString("consoleLog", "")?.ifEmpty { null } ?: File(vmDir, "debian-console.log").absolutePath
+
+    override suspend fun guestStatus(): GuestStatus = withContext(Dispatchers.IO) {
+        val image = guestImage()
+        val kernel = guestKernel()
+        val imageOk = try { File(image).exists() } catch (_: Exception) { false }
+        val kernelOk = try { File(kernel).exists() } catch (_: Exception) { false }
+        val crosvm = findBinary("crosvm", listOf("/apex/com.android.virt/bin/vm"))
+        val ssh = findBinary("ssh")
+        val tok = sessionToken() != null
+        val port = try {
+            firstExisting("vm-state.json")?.let { readJson(it) }?.optInt("sshPort", -1) ?: -1
+        } catch (_: Exception) {
+            -1
+        }
+        val missing = mutableListOf<String>()
+        if (!imageOk) missing.add("guest image ($image)")
+        if (!kernelOk) missing.add("guest kernel ($kernel)")
+        if (crosvm == null) missing.add("crosvm binary")
+        if (ssh == null) missing.add("ssh client (Termux openssh)")
+        GuestStatus(
+            imagePresent = imageOk, kernelPresent = kernelOk,
+            crosvm = crosvm, sshPresent = ssh != null,
+            hasToken = tok, sshPort = if (port > 0) port else null,
+            missing = missing,
+        )
+    }
+
+    private fun issueToken(): Pair<String, String> {
+        val bytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(bytes)
+        val token = bytes.joinToString("") { "%02x".format(it) }
+        val id = commandHash(token)
+        try {
+            vmDir.mkdirs()
+            val f = File(vmDir, ".session-token")
+            f.writeText("{\"token\":\"$token\",\"id\":\"$id\"}")
+            try {
+                f.setReadable(false, false)
+                f.setWritable(false, false)
+                f.setReadable(true, true)
+                f.setWritable(true, true)
+            } catch (_: Exception) {
+            }
+        } catch (_: Exception) {
+        }
+        return token to id
+    }
+
+    private fun saveBootState(port: Int, tokenId: String, pid: Long?) {
+        try {
+            vmDir.mkdirs()
+            val f = File(vmDir, "vm-state.json")
+            val cur = try {
+                if (f.exists()) JSONObject(f.readText()) else JSONObject()
+            } catch (_: Exception) {
+                JSONObject()
+            }
+            cur.put("sshPort", port)
+            cur.put("tokenId", tokenId)
+            if (pid != null) cur.put("pid", pid)
+            f.writeText(cur.toString(2))
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun runSsh(
+        remoteCmd: String,
+        stdin: String?,
+        timeoutMs: Long,
+    ): Triple<Int, String, String> {
+        val port = sshPort()
+        val cmd = baseSshArgs(port, (timeoutMs / 1000).toInt().coerceAtLeast(10)) + listOf(
+            "$sshUser@127.0.0.1", remoteCmd,
+        )
+        val proc = spawn(cmd).start()
+        running.set(proc)
+        try {
+            if (stdin != null) {
+                try {
+                    proc.outputStream.bufferedWriter(Charsets.UTF_8).use {
+                        it.write(stdin)
+                        it.flush()
+                    }
+                } catch (e: Exception) {
+                    return Triple(-1, "", e.message ?: "stdin failed")
+                }
+            } else {
+                try {
+                    proc.outputStream.close()
+                } catch (_: Exception) {
+                }
+            }
+            val done = proc.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!done) {
+                proc.destroyForcibly()
+                return Triple(-1, "", "timeout")
+            }
+            return Triple(
+                proc.exitValue(),
+                proc.inputStream.bufferedReader().readText(),
+                proc.errorStream.bufferedReader().readText(),
+            )
+        } finally {
+            running.compareAndSet(proc, null)
+        }
+    }
+
+    override suspend fun boot(): GuestOpResult = withContext(Dispatchers.IO) {
+        val st = guestStatus()
+        if (st.missing.isNotEmpty()) {
+            return@withContext GuestOpResult(
+                ok = false,
+                remediation = "Missing: ${st.missing.joinToString(", ")}. " +
+                    "Place a Debian rootfs + kernel at the paths in sunshine-vm.json " +
+                    "and install Termux openssh, then retry.",
+            )
+        }
+        val port = (22000..22999).random()
+        val crosvmBin = st.crosvm ?: return@withContext GuestOpResult(
+            ok = false, remediation = "crosvm binary not found.",
+        )
+        val cfgObj = cfg()
+        val mem = cfgObj?.optInt("memoryMb", 2048) ?: 2048
+        val cpus = cfgObj?.optInt("cpus", 2) ?: 2
+        val cmdline = cfgObj?.optString("cmdline", "")?.ifEmpty { null }
+            ?: "root=/dev/vda1 rw console=hvc0"
+        val args = mutableListOf(
+            crosvmBin, "run",
+            "--cid", guestCid().toString(),
+            "--mem", mem.toString(),
+            "--cpus", cpus.toString(),
+            "--kernel", guestKernel(),
+            "--cmdline", cmdline,
+            "--serial", "file:${consoleLog()}",
+            guestImage(),
+        )
+        return@withContext try {
+            val log = File(execLog())
+            try {
+                log.parentFile?.mkdirs()
+            } catch (_: Exception) {
+            }
+            val proc = spawn(args)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(log))
+                .redirectError(ProcessBuilder.Redirect.appendTo(log))
+                .start()
+            val (_, tokenId) = issueToken()
+            saveBootState(port, tokenId, try { proc.pid() } catch (_: Exception) { null })
+            // NOTE: channel port is plumbed via vm-state.json sshPort; the
+            // guest agent forwards host→guest on boot (see provision).
+            GuestOpResult(
+                ok = true,
+                note = "Booting (CID ${guestCid()}, channel port $port, token $tokenId). " +
+                    "Wait ~30s, then Provision.",
+            )
+        } catch (e: Exception) {
+            GuestOpResult(ok = false, remediation = e.message ?: "boot-spawn-failed")
+        }
+    }
+
+    private fun jsonEscape(s: String): String = s
+        .replace("\\", "\\\\").replace("\"", "\\\"")
+        .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+    override suspend fun provision(): GuestOpResult = withContext(Dispatchers.IO) {
+        if (!sshAvailable()) {
+            return@withContext GuestOpResult(
+                ok = false, remediation = "OpenSSH client not found; install Termux openssh.",
+            )
+        }
+        val rec = sessionToken() ?: return@withContext GuestOpResult(
+            ok = false, remediation = "No session token. Boot first.",
+        )
+        val token = rec.first
+        val dir = bundleDir ?: return@withContext GuestOpResult(
+            ok = false, remediation = "Guest bundle not packaged with this build.",
+        )
+        val names = listOf("provision.sh", "sunshine-exec", "sunshine-agent.slice", "nftables-sunshine.nft")
+        val bundle = mutableMapOf<String, String>()
+        for (n in names) {
+            if (n == "provision.sh") continue
+            val f = File(dir, n)
+            if (!f.exists()) {
+                return@withContext GuestOpResult(
+                    ok = false, remediation = "Guest bundle unreadable: $n missing.",
+                )
+            }
+            try {
+                bundle[n] = f.readText()
+            } catch (e: Exception) {
+                return@withContext GuestOpResult(
+                    ok = false, remediation = "Guest bundle unreadable: ${e.message}",
+                )
+            }
+        }
+        val installer = try {
+            File(dir, "provision.sh").readText()
+        } catch (e: Exception) {
+            return@withContext GuestOpResult(
+                ok = false, remediation = "Guest bundle unreadable: ${e.message}",
+            )
+        }
+        val port = sshPort()
+        var r = runSsh(
+            "mkdir -p /tmp/sunshine-guest && cat > /tmp/sunshine-guest/provision.sh",
+            installer, 30_000,
+        )
+        if (r.first != 0) {
+            return@withContext GuestOpResult(
+                ok = false,
+                remediation = "Guest not reachable on port $port. Wait for boot, then retry. (ssh: ${r.third.take(120)})",
+            )
+        }
+        val bundleJson = buildString {
+            append("{")
+            bundle.entries.forEachIndexed { i, (k, v) ->
+                if (i > 0) append(",")
+                append("\"").append(k).append("\":\"").append(jsonEscape(v)).append("\"")
+            }
+            append("}")
+        }
+        r = runSsh("cat > /tmp/sunshine-guest/bundle.json", bundleJson, 30_000)
+        if (r.first != 0) {
+            return@withContext GuestOpResult(
+                ok = false, remediation = "Bundle transfer failed (ssh: ${r.third.take(120)}).",
+            )
+        }
+        r = runSsh(
+            "sudo bash /tmp/sunshine-guest/provision.sh",
+            "$token\n2\nopen\n", 120_000,
+        )
+        if (r.first != 0) {
+            return@withContext GuestOpResult(
+                ok = false,
+                remediation = "Activation failed: ${(r.second + r.third).take(300)}",
+            )
+        }
+        try {
+            vmDir.mkdirs()
+            val f = File(vmDir, "vm-state.json")
+            val cur = try {
+                if (f.exists()) JSONObject(f.readText()) else JSONObject()
+            } catch (_: Exception) {
+                JSONObject()
+            }
+            cur.put("guestVersion", 2)
+            f.writeText(cur.toString(2))
+        } catch (_: Exception) {
+        }
+        GuestOpResult(ok = true, note = "Guest bundle v2 active.")
     }
 }
 
@@ -779,6 +1123,39 @@ class VsockGuestChannel(
             if (it.isNotEmpty() && it.last() == "") it.dropLast(1) else it
         }
         return FileContent(path = path, lines = lines, isMarkdown = isMd)
+    }
+
+    override suspend fun guestStatus(): GuestStatus = try {
+        transport.guestStatus()
+    } catch (e: Exception) {
+        GuestStatus(missing = listOf(e.message ?: "status-failed"))
+    }
+
+    override suspend fun bootGuest(): GuestOpResult {
+        val res = try {
+            transport.boot()
+        } catch (e: Exception) {
+            GuestOpResult(ok = false, remediation = e.message ?: "boot-failed")
+        }
+        auditLog.append(
+            "boot",
+            mapOf("ok" to res.ok.toString(), "reason" to res.remediation),
+        )
+        if (res.ok) _connection.emit(ConnectionState.CONNECTED)
+        return res
+    }
+
+    override suspend fun provisionGuest(): GuestOpResult {
+        val res = try {
+            transport.provision()
+        } catch (e: Exception) {
+            GuestOpResult(ok = false, remediation = e.message ?: "provision-failed")
+        }
+        auditLog.append(
+            "provision",
+            mapOf("ok" to res.ok.toString(), "reason" to res.remediation),
+        )
+        return res
     }
 
     suspend fun refreshHealth(): ConnectionState {
