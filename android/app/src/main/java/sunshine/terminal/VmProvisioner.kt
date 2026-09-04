@@ -5,15 +5,23 @@
 // What it does (best-effort, never throws):
 //   1. Ensures filesDir/sunshine-vm + filesDir/guest-bundle exist.
 //   2. Unpacks the small guest bundle (assets/guest/* → guest-bundle/).
-//   3. Unpacks optional large assets if the packager bundled them:
-//        assets/guest/debian.img.gz → sunshine-vm/debian.img (gunzipped)
-//        assets/guest/Image         → sunshine-vm/Image
-//        assets/guest/sunshine-vm.json → sunshine-vm/sunshine-vm.json
-//      These are NOT in the repo (too large) — when absent they are reported
-//      in ProvisionResult.missingOptional so the UI can show a calm hint
-//      instead of crashing. A future build can bundle or download them.
+//   3. Expands the optional compressed rootfs if the packager bundled one:
+//        assets/guest/debian.img.xz → sunshine-vm/debian.img (xz, preferred)
+//        assets/guest/debian.img.gz → sunshine-vm/debian.img (gzip fallback)
+//      then sparse-extends it to the 2G virtual size. ext4/f2fs allocate
+//      blocks only for dirty regions, so a ~600MB rootfs reports 2G to the
+//      guest while consuming ~600MB of flash. Zero-filled images compress to
+//      ~200-300MB, which is what makes bundling/downloading feasible.
+//      !! truncate alone is NOT a rootfs: the artifact must be a real ext4
+//      image (debootstrap/Debian-cloud, free space zeroed before packing).
+//   4. Unpacks the optional kernel + config overlay (byte-identical, AVF).
+//      Large artifacts are NOT in the repo — when absent they are reported
+//      in ProvisionResult.missingOptional so the UI shows a calm hint.
+//      A build may bundle them or fetch them via a downloader into the same
+//      files; this code accepts both without changes.
 //
-// The pure-File core (ensureProvisionedDirs) is unit-tested without Android.
+// The pure-File core (ensureProvisionedDirs + provisionRootfs) is
+// unit-tested without Android.
 package sunshine.terminal
 
 import android.content.Context
@@ -39,8 +47,16 @@ object VmProvisioner {
         "nftables-sunshine.nft",
     )
 
+    const val ROOTFS_ASSET_XZ = "guest/debian.img.xz"
     const val ROOTFS_ASSET_GZ = "guest/debian.img.gz"
     const val ROOTFS_FILE = "debian.img"
+    /** Virtual capacity reported to the guest (sparse — flash only pays for dirty blocks). */
+    const val ROOTFS_VIRTUAL_SIZE_BYTES = 2L * 1024 * 1024 * 1024
+    /** Sanity floor: a real minimal Debian rootfs is hundreds of MB. Below
+     *  this the file is a stale/partial download and gets replaced. */
+    const val ROOTFS_MIN_VALID_BYTES = 50L * 1024 * 1024
+    /** Free-space gate before expanding (compressed artifact + working room). */
+    const val ROOTFS_MIN_FREE_BYTES = 1024L * 1024 * 1024
     const val KERNEL_ASSET = "guest/Image"
     const val KERNEL_FILE = "Image"
     const val VM_CONFIG_ASSET = "guest/sunshine-vm.json"
@@ -136,39 +152,11 @@ object VmProvisioner {
             }
         }
 
-        // 2. Optional large rootfs (gzipped to keep the APK small).
-        val rootfsDest = File(vmDir, ROOTFS_FILE)
-        val rootfsReady = try {
-            rootfsDest.exists() && rootfsDest.length() > 0
-        } catch (_: Exception) {
-            false
-        }
-        if (rootfsReady) {
-            skipped.add(ROOTFS_FILE)
-        } else {
-            val gz = try {
-                openAsset(ROOTFS_ASSET_GZ)
-            } catch (_: Exception) {
-                null
-            }
-            if (gz == null) {
-                missing.add("$ROOTFS_FILE (bundle $ROOTFS_ASSET_GZ or manual download)")
-            } else {
-                try {
-                    gz.use { raw ->
-                        GZIPInputStream(raw).use { src ->
-                            rootfsDest.outputStream().use { out -> src.copyTo(out) }
-                        }
-                    }
-                    unpacked.add(ROOTFS_FILE)
-                } catch (_: Exception) {
-                    try {
-                        rootfsDest.delete()
-                    } catch (_: Exception) {
-                    }
-                    missing.add("$ROOTFS_FILE (unpack failed)")
-                }
-            }
+        // 2. Optional compressed rootfs → expand + sparse-extend.
+        when (val r = provisionRootfs(openAsset, vmDir)) {
+            is RootfsResult.Ready -> skipped.add(ROOTFS_FILE)
+            is RootfsResult.Unpacked -> unpacked.add(ROOTFS_FILE)
+            is RootfsResult.Missing -> missing.add(r.message)
         }
 
         // 3. Optional kernel (uncompressed — must stay byte-identical for AVF).
@@ -240,5 +228,136 @@ object VmProvisioner {
             skippedExisting = skipped,
             missingOptional = missing,
         )
+    }
+
+    /** Outcome of the rootfs expand step (pure-File, unit-tested). */
+    sealed interface RootfsResult {
+        data object Ready : RootfsResult
+        data object Unpacked : RootfsResult
+        data class Missing(val message: String) : RootfsResult
+    }
+
+    /**
+     * Expand the compressed rootfs artifact into [vmDir]/debian.img, then
+     * sparse-extend to [ROOTFS_VIRTUAL_SIZE_BYTES].
+     *
+     * Source preference: xz (∼30% smaller) → gz (faster, no extra dep).
+     * Streaming 8KB copy — peak RAM stays flat regardless of image size.
+     * [onProgress] receives bytes written so a future downloader UI can show
+     * MB progress; ignored by the silent first-run path.
+     */
+    fun provisionRootfs(
+        openAsset: (String) -> InputStream?,
+        vmDir: File,
+        onProgress: (bytesWritten: Long) -> Unit = {},
+        minValidBytes: Long = ROOTFS_MIN_VALID_BYTES,
+        virtualSizeBytes: Long = ROOTFS_VIRTUAL_SIZE_BYTES,
+    ): RootfsResult {
+        val dest = File(vmDir, ROOTFS_FILE)
+        try {
+            if (dest.exists()) {
+                if (dest.length() >= minValidBytes) return RootfsResult.Ready
+                // Stale/partial download — drop it and try a clean expand.
+                try {
+                    dest.delete()
+                } catch (_: Exception) {
+                }
+            }
+        } catch (_: Exception) {
+        }
+        // Free-space gate: fail with a clear message instead of dying mid-write.
+        val free = try {
+            vmDir.mkdirs()
+            vmDir.usableSpace
+        } catch (_: Exception) {
+            -1L
+        }
+        if (free in 0 until ROOTFS_MIN_FREE_BYTES) {
+            return RootfsResult.Missing(
+                "$ROOTFS_FILE (need ~1GB free, have ${free / (1024 * 1024)}MB)",
+            )
+        }
+        var stream: InputStream? = null
+        var xz = false
+        for (candidate in listOf(ROOTFS_ASSET_XZ to true, ROOTFS_ASSET_GZ to false)) {
+            try {
+                stream = openAsset(candidate.first)
+            } catch (_: Exception) {
+                stream = null
+            }
+            if (stream != null) {
+                xz = candidate.second
+                break
+            }
+        }
+        if (stream == null) {
+            return RootfsResult.Missing(
+                "$ROOTFS_FILE (bundle $ROOTFS_ASSET_XZ/$ROOTFS_ASSET_GZ or manual download)",
+            )
+        }
+        try {
+            stream.use { raw ->
+                val src: InputStream = if (xz) {
+                    org.tukaani.xz.XZInputStream(raw)
+                } else {
+                    GZIPInputStream(raw)
+                }
+                src.use { inp ->
+                    dest.outputStream().use { out ->
+                        val buf = ByteArray(8192)
+                        var written = 0L
+                        while (true) {
+                            val n = inp.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            written += n
+                            try {
+                                onProgress(written)
+                            } catch (_: Exception) {
+                            }
+                        }
+                        out.flush()
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            try {
+                dest.delete()
+            } catch (_: Exception) {
+            }
+            return RootfsResult.Missing("$ROOTFS_FILE (unpack failed — re-download or re-bundle)")
+        }
+        // Validity floor: catches truncated downloads before first boot.
+        val finalLen = try {
+            dest.length()
+        } catch (_: Exception) {
+            0L
+        }
+        if (finalLen < minValidBytes) {
+            try {
+                dest.delete()
+            } catch (_: Exception) {
+            }
+            return RootfsResult.Missing("$ROOTFS_FILE (image too small — truncated artifact)")
+        }
+        // Sparse extend to the virtual size. Metadata-only on ext4/f2fs:
+        // unwritten regions read as zeros and consume no flash.
+        sparseExtend(dest, virtualSizeBytes)
+        return RootfsResult.Unpacked
+    }
+
+    /**
+     * Extend [file] to [targetBytes] without allocating blocks (sparse).
+     * Never shrinks. Returns the final length, or -1 on failure.
+     */
+    fun sparseExtend(file: File, targetBytes: Long): Long {
+        return try {
+            java.io.RandomAccessFile(file, "rw").use { raf ->
+                if (raf.length() < targetBytes) raf.setLength(targetBytes)
+                raf.length
+            }
+        } catch (_: Exception) {
+            -1L
+        }
     }
 }

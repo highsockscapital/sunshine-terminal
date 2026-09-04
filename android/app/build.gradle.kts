@@ -48,5 +48,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.kotlinx.coroutines)
+    // Pure-Java xz decoder for debian.img.xz (~110KB, no native code).
+    implementation(libs.xz)
     testImplementation("junit:junit:4.13.2")
 }
