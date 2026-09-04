@@ -1,0 +1,39 @@
+# Sunshine Terminal release — attach the debug APK to the GitHub Release page.
+# Trigger: push a tag like v1.0.0 (matches versionName 1.0.0).
+# Unsigned debug APK only — signed release is out of scope (needs keystore
+# secrets, same as ci.yml notes). Uses the built-in GITHUB_TOKEN, no extra
+# secrets required.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-apk:
+    name: Build + attach debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+      - run: gradle :app:assembleDebug --stacktrace
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: true
