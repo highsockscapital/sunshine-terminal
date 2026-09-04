@@ -217,12 +217,6 @@ class TerminalViewModel(
         }
     }
 
-    fun toggleDrawer() {
-        val open = !_state.value.drawerOpen
-        _state.update { it.copy(drawerOpen = open) }
-        if (open) refreshWorkspace(_state.value.workspace.cwd)
-    }
-
     fun refreshWorkspace(path: String = ".") {
         viewModelScope.launch {
             val listing = try {

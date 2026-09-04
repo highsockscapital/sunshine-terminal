@@ -312,22 +312,19 @@ private fun StatusBanner(state: TerminalUiState) {
 
 /** Preview-only channel for @Preview renders: echoes input, never touches a guest.
  *  Production uses VsockGuestChannel (VsockFrameMultiplexer → live Debian pVM).
- *  DEBUG-only guard below fails fast if it is ever wired into MainActivity —
- *  that is what causes Mock/Preview Mode. */
+ *  DEBUG-ONLY BY CONVENTION: never wire this into MainActivity — that is what
+ *  causes Mock/Preview Mode. (No BuildConfig reference: the design module owns
+ *  tokens; keep this file free of generated-code imports.) */
 class FakeGuestChannel : GuestChannel {
     override val stdout: Flow<ChannelLine> = emptyFlow()
     override val thermal: Flow<ThermalSnapshot> = emptyFlow()
     override val connection: Flow<ConnectionState> = emptyFlow()
-    private fun debugOnly() {
-        check(sunshine.terminal.BuildConfig.DEBUG) { "FakeGuestChannel is DEBUG-only (previews/tests)" }
-    }
     override suspend fun exec(
         command: String,
         origin: String,
         approved: Boolean,
         blockId: Long?,
     ): ChannelOutcome {
-        debugOnly()
         return ChannelOutcome.Completed(
             lines = listOf("(preview) ran: $command"),
             exitCode = 0,

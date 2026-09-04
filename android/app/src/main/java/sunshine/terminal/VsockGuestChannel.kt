@@ -144,14 +144,6 @@ internal fun classifyRisk(command: String): Pair<RiskTier, String> {
     }
     return RiskTier.SAFE to "no-risk-patterns"
 }
-    if (Regex("""\|\s*(sh|bash|zsh)\b""").containsMatchIn(norm)) {
-        return RiskTier.DESTRUCTIVE to "pipe-to-shell"
-    }
-    for (re in T2_PATTERNS) {
-        if (re.containsMatchIn(norm)) return RiskTier.STATE_CHANGE to "matched state-change pattern ${re.pattern.take(40)}"
-    }
-    return RiskTier.SAFE to "no-risk-patterns"
-}
 
 // ---------------------------------------------------------------------------
 // VsockFrameMultiplexer — length-prefixed frames multiplexed by blockId.
@@ -468,7 +460,7 @@ class SshGuestTransport(
 
 class VsockGuestChannel(
     private val transport: GuestTransport,
-    private val thermal: GuestThermalSource = AndroidThermalSource(),
+    private val thermalSource: GuestThermalSource = AndroidThermalSource(),
     stateDir: File? = null,
     audit: GuestAuditLog? = null,
 ) : GuestChannel {
@@ -619,7 +611,7 @@ class VsockGuestChannel(
 
         // Single thermal snapshot per exec (thermal.js probeThermal).
         val snap = try {
-            thermal.snapshot()
+            thermalSource.snapshot()
         } catch (_: Exception) {
             ThermalReading(false)
         }
@@ -762,9 +754,9 @@ class VsockGuestChannel(
         val q = shQuote(path)
         // Size + binary guards first (drawer.js previewLinesFor skips binary/
         // large files): >200 KiB or NUL byte → honest skip, no dump into UI.
-        val probe = "sz=$(stat -c%s $q 2>/dev/null || echo 0); " +
-            "if [ \"$sz\" -gt 204800 ]; then echo SUNSHINE-TOO-LARGE; " +
-            "elif LC_ALL=C grep -q -m1 \"$(printf '\\x00')\" $q 2>/dev/null; then echo SUNSHINE-BINARY; " +
+        val probe = "sz=\$(stat -c%s $q 2>/dev/null || echo 0); " +
+            "if [ \"\$sz\" -gt 204800 ]; then echo SUNSHINE-TOO-LARGE; " +
+            "elif LC_ALL=C grep -q -m1 \"\$(printf '\\x00')\" $q 2>/dev/null; then echo SUNSHINE-BINARY; " +
             "else sed -n '1,200p' $q 2>&1; fi"
         val bid = internalIds.getAndDecrement()
         val frame = VsockFrameMultiplexer.encode(bid, token = "", origin = "human", command = probe)
