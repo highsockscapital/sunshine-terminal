@@ -480,22 +480,6 @@ class SshGuestTransport(
     // the app finds the Termux openssh client when present on-device.
     // ------------------------------------------------------------------
 
-    override suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            if (!sshAvailable()) return@withContext false
-            val port = sshPort()
-            val cmd = baseSshArgs(port, 5) + listOf(
-                "$sshUser@127.0.0.1",
-                "true",
-            )
-            val proc = spawn(cmd).start()
-            val finished = proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-            finished && proc.exitValue() == 0
-        } catch (_: Exception) {
-            false
-        }
-    }
-
     private fun pathEnv(): String {
         val sys = System.getenv("PATH") ?: "/system/bin:/vendor/bin"
         val termux = "/data/data/com.termux/files/usr/bin"
@@ -690,7 +674,7 @@ class SshGuestTransport(
                 .redirectError(ProcessBuilder.Redirect.appendTo(log))
                 .start()
             val (_, tokenId) = issueToken()
-            saveBootState(port, tokenId, try { proc.pid() } catch (_: Exception) { null })
+            saveBootState(port, tokenId, pid = null)
             // NOTE: channel port is plumbed via vm-state.json sshPort; the
             // guest agent forwards host→guest on boot (see provision).
             GuestOpResult(
