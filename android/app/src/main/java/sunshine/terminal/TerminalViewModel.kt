@@ -153,6 +153,7 @@ class TerminalViewModel(
         if (ch === activeChannel) return
         activeChannel = ch
         subscribeTo(ch)
+        _state.update { it.copy(onVm = isOnVm()) }
         refreshWorkspace(_state.value.workspace.cwd)
         refreshGuestStatus()
     }

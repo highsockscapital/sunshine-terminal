@@ -313,6 +313,25 @@ fun TerminalScreenContent(
 
 @Composable
 private fun StatusBanner(state: TerminalUiState) {
+    // Shell badge: always visible so on-device vs Debian is never ambiguous.
+    // (File tree, scli availability, and apt all follow this badge.)
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        androidx.compose.material3.Surface(
+            shape = SunshineShape.badge,
+            color = SunshineTokens.cardSurface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, SunshineTokens.strokeBorder),
+        ) {
+            Text(
+                text = if (state.onVm) "\uD83D\uDC27 Debian VM" else "\uD83D\uDCF1 On-device",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = SunshineTokens.textPrimary,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+    }
     // Connection dot removed per design — only the Power Saver warning remains,
     // rendered as an accent fill + dark text chip (contrast-safe: #161610 on
     // #FF9E43) instead of bare accent text on background.

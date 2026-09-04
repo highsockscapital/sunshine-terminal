@@ -51,6 +51,17 @@ class LocalShellChannelTest {
         assertTrue(content.lines.any { it.contains("Hi") })
     }
 
+    @Test fun scliGetsGuidanceNotNotFound() = runBlocking {
+        val ch = LocalShellChannel(tmpRoot())
+        val out = ch.exec("scli vm status", "human", approved = false, blockId = 9L)
+        assertTrue(out is ChannelOutcome.Completed)
+        out as ChannelOutcome.Completed
+        assertEquals(127, out.exitCode)
+        assertTrue(out.lines.any { it.contains("Boot pVM") })
+        // No destructive gating on help text.
+        assertEquals(RiskTier.SAFE, out.tier)
+    }
+
     @Test fun guestStatusIsHonest() = runBlocking {
         val ch = LocalShellChannel(tmpRoot())
         val status = ch.guestStatus()

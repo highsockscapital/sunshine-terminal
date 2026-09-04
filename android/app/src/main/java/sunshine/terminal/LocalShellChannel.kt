@@ -32,6 +32,29 @@ class LocalShellChannel(
     private val ids = AtomicLong(-1L)
     private val running = AtomicReference<Process?>(null)
 
+    /**
+     * Guest-side tooling (scli/sunshine/sunshine-exec) lives in the Debian
+     * pVM or the Termux checkout — never in the app sandbox. Intercept it
+     * here so users get a pointer instead of `inaccessible or not found`.
+     * Returns null for ordinary shell commands (→ run locally).
+     */
+    private fun scliShim(command: String): ChannelOutcome? {
+        val first = command.trimStart().substringBefore(" ").substringBefore("\t")
+        if (first != "scli" && first != "sunshine" && first != "sunshine-exec") return null
+        val lines = listOf(
+            "$first is not available in the on-device shell (this file tree is the app sandbox).",
+            "It runs inside the Debian guest once the pVM is booted:",
+            "  1. Sidebar → Guest → Boot pVM (needs debian.img + Image, see Guest status)",
+            "  2. Then Provision — $first works from this same prompt.",
+            "Or run it from a Termux checkout: scli vm status",
+        )
+        return ChannelOutcome.Completed(
+            lines = lines,
+            exitCode = 127,
+            tier = RiskTier.SAFE,
+        )
+    }
+
     private fun resolve(path: String): File {
         val p = path.trim()
         if (p.isEmpty() || p == ".") return rootDir
@@ -46,6 +69,9 @@ class LocalShellChannel(
         approved: Boolean,
         blockId: Long?,
     ): ChannelOutcome = withContext(Dispatchers.IO) {
+        // Guest-side CLIs don't exist in the app sandbox: answer with
+        // guidance instead of a bare `sh: scli: not found` (exit 127).
+        scliShim(command)?.let { return@withContext it }
         val (tier, reason) = classifyRisk(command)
         val bid = blockId ?: ids.getAndDecrement()
         if (tier != RiskTier.SAFE && !approved) {

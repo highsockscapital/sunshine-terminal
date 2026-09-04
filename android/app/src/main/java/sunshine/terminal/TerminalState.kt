@@ -95,4 +95,6 @@ data class TerminalUiState(
     val selectedFile: FileContent? = null,
     val guest: GuestStatus = GuestStatus(),
     val guestOp: String? = null,
+    /** True when exec is served by the Debian pVM; false = on-device shell. */
+    val onVm: Boolean = false,
 )
