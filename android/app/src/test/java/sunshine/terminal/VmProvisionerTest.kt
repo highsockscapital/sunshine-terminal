@@ -167,6 +167,7 @@ class VmProvisionerTest {
 
     @Test fun partialRootfsIsReplaced() {
         val vm = tmpRoot().also { it.mkdirs() }
+        // Stale file (13B) below the floor, fresh payload (17B) above it.
         File(vm, "debian.img").writeText("stale-partial")
         val gzBytes = run {
             val bos = java.io.ByteArrayOutputStream()
@@ -178,7 +179,7 @@ class VmProvisionerTest {
                 if (name == "guest/debian.img.gz") ByteArrayInputStream(gzBytes) else null
             },
             vmDir = vm,
-            minValidBytes = 1L,
+            minValidBytes = 15L,
             virtualSizeBytes = 64L,
         )
         assertTrue(r is VmProvisioner.RootfsResult.Unpacked)
