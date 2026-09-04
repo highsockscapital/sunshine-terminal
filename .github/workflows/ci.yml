@@ -21,6 +21,10 @@ jobs:
           node-version: 24
       - run: npm test
         working-directory: .
+      # Guest vsock agent framing selftest — golden vectors shared with
+      # VsockWireTest (host/guest stay in lockstep by construction).
+      - run: python3 guest/sunshine-vsock-agent.py --selftest
+        working-directory: .
 
   android-debug:
     name: Android debug APK

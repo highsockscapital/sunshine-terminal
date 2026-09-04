@@ -201,6 +201,8 @@ data class GuestStatus(
     val kernelPresent: Boolean = false,
     val crosvm: String? = null,
     val sshPresent: Boolean = false,
+    /** Vsock agent answers on (cid, port) — the preferred exec path. */
+    val vsockPresent: Boolean = false,
     val hasToken: Boolean = false,
     val sshPort: Int? = null,
     val missing: List<String> = emptyList(),
@@ -291,6 +293,13 @@ class SshGuestTransport(
     fallbackDirs: List<File> = listOf(File("/data/data/com.termux/files/home/.sunshine/vm")),
     private val knownHostsFile: File? = null,
     private val bundleDir: File? = null,
+    /**
+     * Vsock reachability probe (VsockSocketTransport::probe). When the agent
+     * answers, the ssh client is demoted from boot-blocker to soft fallback:
+     * exec prefers vsock, so "ssh client missing" no longer gates boot.
+     * Null (default) preserves the legacy all-ssh behavior.
+     */
+    private val vsockProbe: (suspend () -> Boolean)? = null,
 ) : GuestTransport {
 
     private val extraDirs: List<File> = fallbackDirs
@@ -535,6 +544,12 @@ class SshGuestTransport(
         val kernelOk = try { File(kernel).exists() } catch (_: Exception) { false }
         val crosvm = findBinary("crosvm", listOf("/apex/com.android.virt/bin/vm"))
         val ssh = findBinary("ssh")
+        // Vsock agent reachable? Then ssh is a fallback, not a requirement.
+        val vsockOk = try {
+            vsockProbe?.invoke() == true
+        } catch (_: Exception) {
+            false
+        }
         val tok = sessionToken() != null
         val port = try {
             firstExisting("vm-state.json")?.let { readJson(it) }?.optInt("sshPort", -1) ?: -1
@@ -545,10 +560,10 @@ class SshGuestTransport(
         if (!imageOk) missing.add("guest image ($image)")
         if (!kernelOk) missing.add("guest kernel ($kernel)")
         if (crosvm == null) missing.add("crosvm binary")
-        if (ssh == null) missing.add("ssh client (Termux openssh)")
+        if (ssh == null && !vsockOk) missing.add("ssh client (Termux openssh)")
         GuestStatus(
             imagePresent = imageOk, kernelPresent = kernelOk,
-            crosvm = crosvm, sshPresent = ssh != null,
+            crosvm = crosvm, sshPresent = ssh != null, vsockPresent = vsockOk,
             hasToken = tok, sshPort = if (port > 0) port else null,
             missing = missing,
         )
@@ -704,7 +719,10 @@ class SshGuestTransport(
         val dir = bundleDir ?: return@withContext GuestOpResult(
             ok = false, remediation = "Guest bundle not packaged with this build.",
         )
-        val names = listOf("provision.sh", "sunshine-exec", "sunshine-agent.slice", "nftables-sunshine.nft")
+        val names = listOf(
+            "provision.sh", "sunshine-exec", "sunshine-vsock-agent.py",
+            "sunshine-vsock-agent.service", "sunshine-agent.slice", "nftables-sunshine.nft",
+        )
         val bundle = mutableMapOf<String, String>()
         for (n in names) {
             if (n == "provision.sh") continue

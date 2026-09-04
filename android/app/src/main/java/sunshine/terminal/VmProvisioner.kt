@@ -43,6 +43,8 @@ object VmProvisioner {
     val BUNDLE_FILES = listOf(
         "provision.sh",
         "sunshine-exec",
+        "sunshine-vsock-agent.py",
+        "sunshine-vsock-agent.service",
         "sunshine-agent.slice",
         "nftables-sunshine.nft",
     )

@@ -33,6 +33,8 @@ with open(bundle_path) as f:
     bundle = json.load(f)
 targets = {
     "sunshine-exec": ("/usr/local/bin/sunshine-exec", 0o755),
+    "sunshine-vsock-agent.py": ("/usr/local/bin/sunshine-vsock-agent.py", 0o755),
+    "sunshine-vsock-agent.service": ("/etc/systemd/system/sunshine-vsock-agent.service", 0o644),
     "sunshine-agent.slice": ("/etc/systemd/system/sunshine-agent.slice", 0o644),
     "nftables-sunshine.nft": ("/etc/nftables.d/sunshine.nft", 0o644),
 }
@@ -50,9 +52,13 @@ PYEOF
 printf '%s' "$TOKEN" > "$TOKEN_RUN_DIR/session-token"
 chmod 600 "$TOKEN_RUN_DIR/session-token"
 
-# --- 3. Slice activation ---
+# --- 3. Slice activation + vsock agent ---
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload 2>/dev/null || true
+  # Vsock exec agent: host <-> guest over kernel buffers, no sshd needed
+  # for steady-state exec once this unit is up.
+  systemctl enable --now sunshine-vsock-agent.service 2>/dev/null || \
+    systemctl restart sunshine-vsock-agent.service 2>/dev/null || true
 fi
 
 # --- 4. Firewall ---

@@ -13,7 +13,7 @@ import sunshine.design.sunshineTypography
 class MainActivity : ComponentActivity() {
 
     // Production path: framed channel into the live Debian pVM
-    // (VsockFrameMultiplexer → SshGuestTransport → sunshine-exec).
+    // (VsockFrameMultiplexer → vsock agent, SSH bootstrap fallback).
     // FakeGuestChannel lives only in TerminalScreen.kt for @Previews —
     // it must never back this screen (it just echoes "(preview) ran: …").
     private val terminalViewModel: TerminalViewModel by viewModels {
@@ -34,8 +34,14 @@ class MainActivity : ComponentActivity() {
                 val bundleDir = VmProvisioner.bundleDir(appCtx).also { it.mkdirs() }
                 // stateDir backs the persisted agent-step counter, JSONL
                 // audit log, and ssh known_hosts pinning.
+                // Transport preference: vsock (no ssh/IP stack) → SSH
+                // (bootstrap fallback) — see VsockSocketTransport.
+                val vsock = VsockSocketTransport()
+                val ssh = SshGuestTransport(
+                    vmDir, bundleDir = bundleDir, vsockProbe = vsock::probe,
+                )
                 val vmChannel = VsockGuestChannel(
-                    SshGuestTransport(vmDir, bundleDir = bundleDir),
+                    HybridGuestTransport(vsock, vsock::probe, ssh),
                     stateDir = vmDir,
                 )
                 // On-device shell: zero-setup fallback (no ssh/crosvm/Termux).

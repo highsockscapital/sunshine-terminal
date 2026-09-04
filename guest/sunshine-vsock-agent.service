@@ -1,0 +1,16 @@
+[Unit]
+Description=Sunshine vsock exec agent (host <-> guest, no ssh)
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sunshine-vsock-agent.py
+Restart=always
+RestartSec=2
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

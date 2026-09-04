@@ -29,7 +29,7 @@ const BUNDLE_DIR = path.join(path.dirname(path.dirname(fileURLToPath(import.meta
 // Payload files shipped inside bundle.json; provision.sh travels separately
 // (it is the installer that consumes the bundle).
 export const GUEST_INSTALLER = 'provision.sh';
-export const GUEST_FILES = ['sunshine-exec', 'sunshine-agent.slice', 'nftables-sunshine.nft'];
+export const GUEST_FILES = ['sunshine-exec', 'sunshine-vsock-agent.py', 'sunshine-vsock-agent.service', 'sunshine-agent.slice', 'nftables-sunshine.nft'];
 
 export function defaultDebianConfig(vmDir) {
   return {
