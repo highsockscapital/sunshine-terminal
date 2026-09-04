@@ -52,9 +52,6 @@ class VsockWireTest {
         var primaryCalls = 0
         var fallbackCalls = 0
         fun stub(result: TransportResult, counter: () -> Unit) = object : GuestTransport {
-            override val stdout = kotlinx.coroutines.flow.emptyFlow<ChannelLine>()
-            override val thermal = kotlinx.coroutines.flow.emptyFlow<ThermalSnapshot>()
-            override val connection = kotlinx.coroutines.flow.emptyFlow<ConnectionState>()
             override suspend fun execFrame(frame: ByteArray, blockId: Long, timeoutMs: Long): TransportResult {
                 counter()
                 return result
