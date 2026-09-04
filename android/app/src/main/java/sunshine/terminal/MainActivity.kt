@@ -34,11 +34,15 @@ class MainActivity : ComponentActivity() {
                 val bundleDir = VmProvisioner.bundleDir(appCtx).also { it.mkdirs() }
                 // stateDir backs the persisted agent-step counter, JSONL
                 // audit log, and ssh known_hosts pinning.
-                val channel = VsockGuestChannel(
+                val vmChannel = VsockGuestChannel(
                     SshGuestTransport(vmDir, bundleDir = bundleDir),
                     stateDir = vmDir,
                 )
-                return TerminalViewModel(channel) as T
+                // On-device shell: zero-setup fallback (no ssh/crosvm/Termux).
+                // The ViewModel starts here and auto-upgrades to vmChannel
+                // once the pVM is booted + provisioned.
+                val localChannel = LocalShellChannel(rootDir = appCtx.filesDir)
+                return TerminalViewModel(channel = localChannel, vmChannel = vmChannel) as T
             }
         }
     }

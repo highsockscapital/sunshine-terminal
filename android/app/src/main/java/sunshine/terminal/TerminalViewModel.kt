@@ -92,14 +92,24 @@ interface GuestChannel {
 }
 
 class TerminalViewModel(
-    private val channel: GuestChannel,
+    channel: GuestChannel,
+    private val vmChannel: GuestChannel? = null,
 ) : ViewModel() {
 
     private val ids = AtomicLong(1L)
     private val _state = MutableStateFlow(TerminalUiState())
     val state: StateFlow<TerminalUiState> = _state.asStateFlow()
 
+    /** Transport serving exec/workspace. Starts on-device (LocalShellChannel),
+     *  upgrades to the pVM once it is ready — no Termux needed. */
+    private var activeChannel: GuestChannel = channel
+
+    /** Transport for boot/provision/status probes — always the pVM when wired. */
+    private val guestOpChannel: GuestChannel get() = vmChannel ?: activeChannel
+
     private var streamJob: Job? = null
+    private var thermalJob: Job? = null
+    private var connectionJob: Job? = null
     private var railContext = RailContext.DEFAULT
     private val sessionIds = AtomicLong(1L)
     private var firstRunAutoBootAttempted = false
@@ -113,9 +123,12 @@ class TerminalViewModel(
         }
     }
 
-    init {
+    private fun subscribeTo(ch: GuestChannel) {
+        streamJob?.cancel()
+        thermalJob?.cancel()
+        connectionJob?.cancel()
         streamJob = viewModelScope.launch {
-            channel.stdout.collect { line ->
+            ch.stdout.collect { line ->
                 _state.update { s ->
                     s.copy(blocks = s.blocks.map { b ->
                         if (b.id == line.blockId) b.copy(lines = b.lines + line.text) else b
@@ -123,16 +136,32 @@ class TerminalViewModel(
                 }
             }
         }
-        viewModelScope.launch {
-            channel.thermal.collect { t ->
+        thermalJob = viewModelScope.launch {
+            ch.thermal.collect { t ->
                 _state.update { it.copy(powerSaver = t.powerSaver, powerSaverReasons = t.reasons) }
             }
         }
-        viewModelScope.launch {
-            channel.connection.collect { c ->
+        connectionJob = viewModelScope.launch {
+            ch.connection.collect { c ->
                 _state.update { it.copy(connection = c) }
             }
         }
+    }
+
+    /** Switch the exec/workspace transport (local ↔ pVM). Idempotent. */
+    fun setChannel(ch: GuestChannel) {
+        if (ch === activeChannel) return
+        activeChannel = ch
+        subscribeTo(ch)
+        refreshWorkspace(_state.value.workspace.cwd)
+        refreshGuestStatus()
+    }
+
+    /** True when exec is served by the Debian pVM (not the on-device shell). */
+    fun isOnVm(): Boolean = vmChannel != null && activeChannel === vmChannel
+
+    init {
+        subscribeTo(activeChannel)
         val firstId = newSessionId()
         _state.update {
             it.copy(
@@ -148,41 +177,45 @@ class TerminalViewModel(
     }
 
     /**
-     * Silent first-launch flow: if the pVM prerequisites are present but no
-     * session token exists, boot + provision in the background so the canvas
-     * drops straight to `sunshine >` with the file tree loaded. Manual
-     * Boot/Provision buttons remain as a debug fallback.
-     * Idempotent — runs at most once per ViewModel lifetime.
+     * Silent first-launch flow. Exec stays on the on-device shell while the
+     * pVM boots in the background, then upgrades automatically — the user
+     * never waits and never touches Termux. Manual Boot/Provision buttons
+     * remain as a debug fallback. Idempotent per ViewModel lifetime.
      */
     fun autoBootIfNeeded() {
         if (firstRunAutoBootAttempted) return
         firstRunAutoBootAttempted = true
+        val vm = vmChannel ?: return
         viewModelScope.launch {
             val status = try {
-                channel.guestStatus()
+                vm.guestStatus()
             } catch (e: Exception) {
                 GuestStatus(missing = listOf(e.message ?: "status-failed"))
             }
             _state.update { it.copy(guest = status) }
             if (!shouldAutoBoot(status)) {
-                if (status.missing.isNotEmpty()) {
+                if (status.missing.isEmpty() && status.hasToken) {
+                    // pVM already live (e.g. restarted app) — switch silently.
+                    setChannel(vm)
+                    _state.update { it.copy(guestOp = null) }
+                } else if (status.missing.isNotEmpty()) {
                     val hint = status.missing.firstOrNull()?.take(90)
                     _state.update {
-                        it.copy(guestOp = "First-run setup: $hint — guest starts automatically once ready.")
+                        it.copy(guestOp = "On-device shell · pVM: $hint")
                     }
                 }
                 return@launch
             }
-            _state.update { it.copy(guestOp = "Starting Sunshine VM…") }
+            _state.update { it.copy(guestOp = "On-device shell · starting Debian VM in background…") }
             val boot = try {
-                channel.bootGuest()
+                vm.bootGuest()
             } catch (e: Exception) {
                 GuestOpResult(ok = false, remediation = e.message ?: "boot-failed")
             }
             refreshGuestStatus()
             if (!boot.ok) {
                 _state.update {
-                    it.copy(guestOp = boot.remediation ?: "Boot failed — retry from the Guest section.")
+                    it.copy(guestOp = "On-device shell · VM boot: ${boot.remediation ?: "retry from the Guest section."}")
                 }
                 return@launch
             }
@@ -193,12 +226,12 @@ class TerminalViewModel(
             for ((attempt, waitMs) in delays.withIndex()) {
                 if (waitMs > 0) {
                     _state.update {
-                        it.copy(guestOp = "Starting Sunshine VM… (warming up ${attempt + 1}/${delays.size})")
+                        it.copy(guestOp = "On-device shell · VM warming up ${attempt + 1}/${delays.size}…")
                     }
                     delay(waitMs)
                 }
                 provision = try {
-                    channel.provisionGuest()
+                    vm.provisionGuest()
                 } catch (e: Exception) {
                     GuestOpResult(ok = false, remediation = e.message ?: "provision-failed")
                 }
@@ -212,11 +245,16 @@ class TerminalViewModel(
             }
             refreshGuestStatus()
             val ok = provision?.ok == true
-            _state.update {
-                it.copy(
-                    guestOp = if (ok) null else provision?.remediation
-                        ?: "Provisioning — retry from the Guest section.",
-                )
+            if (ok) {
+                setChannel(vm)
+                _state.update { it.copy(guestOp = null) }
+            } else {
+                _state.update {
+                    it.copy(
+                        guestOp = "On-device shell · " + (provision?.remediation
+                            ?: "provisioning — retry from the Guest section."),
+                    )
+                }
             }
             refreshWorkspace(_state.value.workspace.cwd)
         }
@@ -314,7 +352,7 @@ class TerminalViewModel(
     fun refreshGuestStatus() {
         viewModelScope.launch {
             val g = try {
-                channel.guestStatus()
+                guestOpChannel.guestStatus()
             } catch (e: Exception) {
                 GuestStatus(missing = listOf(e.message ?: "status-failed"))
             }
@@ -326,7 +364,7 @@ class TerminalViewModel(
         viewModelScope.launch {
             _state.update { it.copy(guestOp = "Booting…") }
             val res = try {
-                channel.bootGuest()
+                guestOpChannel.bootGuest()
             } catch (e: Exception) {
                 GuestOpResult(ok = false, remediation = e.message)
             }
@@ -342,9 +380,14 @@ class TerminalViewModel(
         viewModelScope.launch {
             _state.update { it.copy(guestOp = "Provisioning…") }
             val res = try {
-                channel.provisionGuest()
+                guestOpChannel.provisionGuest()
             } catch (e: Exception) {
                 GuestOpResult(ok = false, remediation = e.message)
+            }
+            if (res.ok) {
+                // Manual provision succeeded — move exec onto the pVM.
+                val vm = vmChannel
+                if (vm != null) setChannel(vm)
             }
             _state.update {
                 it.copy(guestOp = res.note ?: res.remediation ?: if (res.ok) "Provisioned." else "Provision failed.")
@@ -356,7 +399,7 @@ class TerminalViewModel(
     fun refreshWorkspace(path: String = ".") {
         viewModelScope.launch {
             val listing = try {
-                channel.listWorkspace(path)
+                activeChannel.listWorkspace(path)
             } catch (e: Exception) {
                 WorkspaceListing(cwd = path, error = e.message)
             }
@@ -371,7 +414,7 @@ class TerminalViewModel(
         } else {
             viewModelScope.launch {
                 val content = try {
-                    channel.readWorkspaceFile(entry.path)
+                    activeChannel.readWorkspaceFile(entry.path)
                 } catch (e: Exception) {
                     FileContent(path = entry.path, error = e.message)
                 }
@@ -401,7 +444,7 @@ class TerminalViewModel(
     }
 
     fun onRailControl(key: ControlKey) {
-        viewModelScope.launch { channel.sendControl(key) }
+        viewModelScope.launch { activeChannel.sendControl(key) }
     }
 
     fun send(origin: String = "human") {
@@ -423,7 +466,7 @@ class TerminalViewModel(
             next.copy(sessions = syncSessions(next))
         }
         viewModelScope.launch {
-            when (val out = channel.exec(command, origin, approved = false, blockId = block.id)) {
+            when (val out = activeChannel.exec(command, origin, approved = false, blockId = block.id)) {
                 is ChannelOutcome.Completed -> _state.update { s ->
                     val next = s.copy(blocks = s.blocks.map { b ->
                         if (b.id == block.id) {
@@ -460,7 +503,7 @@ class TerminalViewModel(
         _state.update { it.copy(pendingApproval = null) }
         viewModelScope.launch {
             // Re-exec with the user's confirmation (engine verdict path).
-            when (val out = channel.exec(req.command, req.origin, approved = true, blockId = req.blockId)) {
+            when (val out = activeChannel.exec(req.command, req.origin, approved = true, blockId = req.blockId)) {
                 is ChannelOutcome.Completed -> _state.update { s ->
                     s.copy(blocks = s.blocks.map { b ->
                         if (b.id == req.blockId) {
@@ -495,7 +538,7 @@ class TerminalViewModel(
 
     fun continueLoop() {
         viewModelScope.launch {
-            channel.continueLoop()
+            activeChannel.continueLoop()
             _state.update { it.copy(loopPause = null) }
         }
     }
@@ -516,6 +559,8 @@ class TerminalViewModel(
 
     override fun onCleared() {
         streamJob?.cancel()
+        thermalJob?.cancel()
+        connectionJob?.cancel()
         super.onCleared()
     }
 }
