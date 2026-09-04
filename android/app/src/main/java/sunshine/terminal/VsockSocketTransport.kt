@@ -19,6 +19,7 @@ import java.io.FileDescriptor
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
@@ -107,7 +108,7 @@ class VsockSocketTransport(
                     connect()
                 } catch (e: Exception) {
                     val reason = if (e is SocketTimeoutException ||
-                        (e as? java.util.concurrent.TimeoutCancellationException) != null
+                        e is TimeoutCancellationException
                     ) {
                         "vsock-connect-timeout"
                     } else {
