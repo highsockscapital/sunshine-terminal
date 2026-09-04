@@ -354,7 +354,7 @@ object VmProvisioner {
         return try {
             java.io.RandomAccessFile(file, "rw").use { raf ->
                 if (raf.length() < targetBytes) raf.setLength(targetBytes)
-                raf.length
+                raf.length()
             }
         } catch (_: Exception) {
             -1L
