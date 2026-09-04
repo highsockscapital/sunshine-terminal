@@ -196,7 +196,6 @@ class VmProvisionerTest {
         assertEquals(1024L, VmProvisioner.sparseExtend(f, 64L))
         assertEquals(1024L, f.length())
     }
-    }
 
     @Test fun neverThrowsWhenEverythingMissing() {
         val root = tmpRoot()
