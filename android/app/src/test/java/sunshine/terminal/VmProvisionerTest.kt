@@ -39,12 +39,14 @@ class VmProvisionerTest {
         val vm = File(root, "sunshine-vm")
         val bundle = File(root, "guest-bundle").also { it.mkdirs() }
         File(bundle, "provision.sh").writeText("keep-me")
-        var opened = 0
+        var bundleOpens = 0
         val res = VmProvisioner.ensureProvisionedDirs(
             assetNames = listOf("provision.sh"),
             openAsset = { name ->
-                opened += 1
-                ByteArrayInputStream("new".toByteArray())
+                // Large-asset probes (rootfs/kernel/config) return null here;
+                // only count opens for the already-existing bundle file.
+                if (name == "guest/provision.sh") bundleOpens += 1
+                null
             },
             vmDir = vm,
             bundleDir = bundle,
@@ -52,7 +54,7 @@ class VmProvisionerTest {
         assertEquals("keep-me", File(bundle, "provision.sh").readText())
         assertTrue(res.skippedExisting.contains("provision.sh"))
         // Existing file must not be re-opened for copy.
-        assertEquals(0, opened)
+        assertEquals(0, bundleOpens)
     }
 
     @Test fun unpacksGzippedRootfsWhenBundled() {
